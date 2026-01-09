@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMS-Project</title>
+
+    <link href="/api/v1/static/css/styles.css" rel="stylesheet">
+    <script src="/api/v1/static/js/index.js"></script>
+</head>
+<body>
+    <header>
+
+    </header>
+
+    <main>
+        <div>
+            <div id="login-theme">
+                <div id="login-background">
+                    <img src="https://www.eclass.tuc.gr/courses/theme_data/36/home_minified_2.png" alt="Tuc">
+                </div>
+
+                <div class="form auth-container" id="login-form-div">
+                    <form 
+                        id="login-form"
+                        method="post"
+                        action="/api/v1/login"
+                    >
+                        <div class="form-header">
+                            <h1>Welcome</h1>
+                            <a href="/api/v1/register">Register</a>
+                        </div>
+                        <input type="text" placeholder="Username or Email" name="username" required>
+                        <input type="password" placeholder="Password" name="password" required>
+                        <button type="submit">Log In</button>
+                    </form>
+
+                </div>
+
+            </div>
+    
+        </div>
+    </main>
+    <footer>
+
+    </footer>
+</body>
+</html>

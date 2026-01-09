@@ -1,0 +1,165 @@
+/* Reset */
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Page background */
+main {
+    width: 100%;
+    height: 100%;
+    background: #e7e4e4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Main container */
+#login-theme, #register-theme {
+    width: 100%;
+    max-width: 1200px;
+    height: 600px;
+    display: flex;
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* LEFT SIDE (background image) */
+#login-background, #register-background {
+    flex: 1.2;
+    position: relative;
+}
+
+#login-background img, #register-background img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 10% center;
+}
+
+/* Fade overlay (left → right) */
+#login-background::after, #register-background::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.45),
+        rgba(0, 0, 0, 0.15),
+        rgba(255, 255, 255, 0.95)
+    );
+}
+
+/* RIGHT SIDE (form area) */
+#login-form-div, #register-form-div {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Form styling */
+#login-form, #register-form {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Inputs */
+#login-form input, #register-form input {
+    font-size: 1.2rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#login-form input:focus, #register-form input:focus {
+    border-color: #4a6cf7;
+    box-shadow: 0 0 0 3px rgba(74, 108, 247, 0.2);
+}
+
+/* Button */
+#login-form button, #register-form button {
+    font-size: 1.2rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    background: #4a6cf7;
+    color: white;
+    font-weight: 600;
+    transition: background 0.2s, transform 0.1s;
+}
+
+#login-form button, #register-form button {
+    background: #3b5bdb;
+}
+
+#login-form button:active, #register-form button:active {
+    transform: scale(0.98);
+}
+
+#login-form h1 {
+    margin-bottom: 1rem;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #333;
+}
+
+/* Header row inside form */
+.form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Title */
+.form-header h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #333;
+}
+
+/* Register link */
+.form-header a {
+    font-size: 0.95rem;
+    color: #4a6cf7;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s, text-decoration 0.2s;
+}
+
+.form-header a:hover {
+    text-decoration: underline;
+    color: #3b5bdb;
+}
+
+.auth-container {
+    position: relative;
+}
+
+.auth-container form {
+    animation: fadeUp 2.35s ease;
+}
+
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

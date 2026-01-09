@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMS-Project</title>
+
+    <link href="/api/v1/static/css/styles.css" rel="stylesheet">
+    <script src="/api/v1/static/js/index.js"></script>
+    
+</head>
+<body>
+    <header>
+
+    </header>
+
+    <main>
+        <div>
+            <div id="register-theme">
+                <div id="register-background">
+                    <img src="https://www.eclass.tuc.gr/courses/theme_data/36/home_minified_2.png" alt="Tuc">
+                </div>
+
+                <div class="form auth-container" id="login-form-div">
+                    <form 
+                        id="register-form"
+                        method="post"
+                        action="/api/v1/register"                   
+                        >
+                        <div class="form-header">
+                            <h1>Register</h1>
+                            <a href="/api/v1/login"> Login</a>
+                        </div>
+                        <input type="text" placeholder="Username" name="username" required>
+                        <input type="text" placeholder="Email" name="email" required>
+                        <input type="password" placeholder="Password" name="password" required>
+                        <input type="password" placeholder="Password repeat" name="repeat-password" required>
+                        
+                        <div class="name-fields">
+                            <input type="text" placeholder="First Name" name="firstname" required>
+                            <input type="text" placeholder="Last name" name="lastname" required>
+                        </div>
+
+                        
+                        
+                        <button type="submit">Register</button>
+                    </form>
+
+                </div>
+
+            </div>
+    
+        </div>
+    </main>
+    <footer>
+
+    </footer>
+</body>
+</html>
