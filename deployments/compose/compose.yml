@@ -2,41 +2,48 @@ services:
   # we have keycloak and the users database seperately
   # kc-db
   kc-db:
-    image: postgres
-    volumes:
-      - kc-db-data:/var/lib/postgresql/kc-data
+    image: postgres:16
     environment:
       POSTGRES_DB: ${KC_DB_NAME}
       POSTGRES_USER: ${KC_DB_USER}
       POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    volumes:
+      - kc-db-data:/var/lib/postgresql/data
   # kc
   kc:
-    image: quay.io/keycloak/keycloak:legacy
-    environment:
-      DB_VENDOR: POSTGRES
-      DB_ADDR: kc-db
-      DB_DATABASE: ${KC_DB_NAME}
-      DB_USER: ${KC_DB_USER}
-      DB_PASSWORD: ${KC_DB_PASSWORD}
-      DB_SCHEMA: public
-      KEYCLOAK_USER: ${KEYCLOAK_USER}
-      KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD}
-    ports: 
-    -  "${KEYCLOAK_PORT}:8080"
+    image: quay.io/keycloak/keycloak:26.5.0
     depends_on:
       - kc-db
-  
+    ports: 
+    -  "${KEYCLOAK_PORT}:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: kc-db
+      KC_DB_URL_DATABASE: ${KC_DB_NAME}
+      KC_DB_USERNAME: ${KC_DB_USER}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+
+      # dev
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    command: ["start-dev"]
 
 
   # we have the main database containing all of our useful data
-  # api-db:
-  #   image: postgres
-  #   volumes: 
-  #     - api-db-data:/var/lib/postgresql/api-data
-  #   environment:
-  #     POSTGRES_DB: apidb
-  #     POSTGRES_USER: admin
-  #     POSTGRES_PASSWORD: admin
+  api-db:
+    image: postgres:16
+    command: ["postgres", "-p", "5432"]
+    volumes: 
+      - api-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
 
   # we will have each service
 

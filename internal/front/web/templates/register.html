@@ -7,6 +7,7 @@
 
     <link href="/api/v1/static/css/styles.css" rel="stylesheet">
     <script src="/api/v1/static/js/index.js"></script>
+    <script src="/api/v1/static/js/htmx/htmx.min.js"></script>
     
 </head>
 <body>
@@ -24,13 +25,16 @@
                 <div class="form auth-container" id="login-form-div">
                     <form 
                         id="register-form"
-                        method="post"
-                        action="/api/v1/register"                   
+                        hx-post="/api/v1/register"                   
+                        hx-trigger="submit"
+                        hx-swap="none"
                         >
                         <div class="form-header">
                             <h1>Register</h1>
                             <a href="/api/v1/login"> Login</a>
                         </div>
+                        <div class="form-error" id="register-error"></div>
+
                         <input type="text" placeholder="Username" name="username" required>
                         <input type="text" placeholder="Email" name="email" required>
                         <input type="password" placeholder="Password" name="password" required>

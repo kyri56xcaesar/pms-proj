@@ -1,0 +1,37 @@
+{{ define "pages/admin_users.html" }}
+<section class="page">
+  <h1>Admin · Users</h1>
+
+  {{ if .VM.Users }}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Enabled</th>
+          <th>Email Verified</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .VM.Users }}
+        <tr>
+          <td><b>{{ .Username }}</b></td>
+          <td>{{ .Email }}</td>
+          <td>{{ if .Enabled }}Yes{{ else }}No{{ end }}</td>
+          <td>{{ if .EmailVerified }}Yes{{ else }}No{{ end }}</td>
+          <td class="right">
+            <!-- details page later -->
+            <a class="btn btn-small" href="/api/v1/auth/admin/users/{{ .ID }}">Open</a>
+          </td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+    <p class="muted">No users found.</p>
+  {{ end }}
+</section>
+{{ end }}

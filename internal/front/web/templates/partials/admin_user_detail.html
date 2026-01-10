@@ -1,0 +1,16 @@
+{{ define "admin_user_detail.html" }}
+<section class="page">
+  <h1>User Details</h1>
+
+  <div class="card">
+    <p><b>ID:</b> {{ .id }}</p>
+    <p><b>Username:</b> {{ .username }}</p>
+    <p><b>Email:</b> {{ .email }}</p>
+    <p><b>Email verified:</b> {{ .emailVerified }}</p>
+    <p><b>First name:</b> {{ .firstName }}</p>
+    <p><b>Last name:</b> {{ .lastName }}</p>
+    <p><b>Enabled:</b> {{ .enabled }}</p>
+    <p><b>Created:</b> {{ .createdAt }}</p>
+  </div>
+</section>
+{{ end }}

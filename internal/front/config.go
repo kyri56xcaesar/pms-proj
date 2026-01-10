@@ -15,7 +15,7 @@ import (
 type Config struct {
 	ConfigPath string
 	Profile    string
-	Verbose    string
+	Verbose    bool
 	ApiGinMode string
 
 	Ip                 string
@@ -29,11 +29,11 @@ type Config struct {
 	AllowedHeaders []string
 
 	//kc
+	Issuer       string
+	Audience     string
 	Realm        string
 	ClientID     string
 	ClientSecret string
-	MasterClient string
-	MasterSecret string
 }
 
 func loadConfig(path string) Config {
@@ -45,7 +45,7 @@ func loadConfig(path string) Config {
 	config := Config{
 		ConfigPath:         s[len(s)-1],
 		Profile:            getEnv("PROFILE", "baremetal"),
-		Verbose:            getEnv("VERBOSE", "true"),
+		Verbose:            getBoolEnv("VERBOSE", "true"),
 		ApiGinMode:         getEnv("GIN_MODE", "debug"),
 		Ip:                 getEnv("IP", "localhost"),
 		Port:               getEnv("PORT", "5045"),
@@ -56,11 +56,11 @@ func loadConfig(path string) Config {
 		AllowedMethods:     getEnvFields("ALLOW_METHDODS", []string{"*"}),
 		AllowedHeaders:     getEnvFields("ALLOW_HEADERS", []string{"*"}),
 
+		Issuer:       getEnv("KC_ISSUER", "http://localhost:5555"),
+		Audience:     getEnv("KC_AUDIENCE", "pms-front"),
 		Realm:        getEnv("KC_REALM", "pms-myproj"),
 		ClientID:     getEnv("KC_CLIENT", "admin"),
 		ClientSecret: getEnv("KC_CLIENT_SECRET", ""),
-		MasterClient: getEnv("KC_MASTER_CLIENT", "admin-cli"),
-		MasterSecret: getEnv("KC_MASTER_SECRET", ""),
 	}
 
 	log.Print(config.toString())

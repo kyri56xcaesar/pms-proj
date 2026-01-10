@@ -1,0 +1,45 @@
+{{ define "pages/dashboard.html" }}
+<section class="page">
+  <h1>Dashboard</h1>
+
+  <div class="card">
+    <p><b>Total teams:</b> {{ .VM.TotalTeams }}</p>
+    <p><b>Total tasks:</b> {{ .VM.TotalTasks }}</p>
+  </div>
+
+  <div class="card">
+    <h3>Tasks by status</h3>
+    <ul>
+      <li>TODO: {{ index .VM.StatusCounts "TODO" }}</li>
+      <li>IN_PROGRESS: {{ index .VM.StatusCounts "IN_PROGRESS" }}</li>
+      <li>DONE: {{ index .VM.StatusCounts "DONE" }}</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Assigned to me</h3>
+    {{ if .VM.AssignedToMe }}
+      <ul>
+        {{ range .VM.AssignedToMe }}
+          <li>{{ .Title }} ({{ .Status }})</li>
+        {{ end }}
+      </ul>
+    {{ else }}
+      <p class="muted">No assigned tasks.</p>
+    {{ end }}
+  </div>
+
+  <div class="card">
+    <h3>Created by me</h3>
+    {{ if .VM.CreatedByMe }}
+      <ul>
+        {{ range .VM.CreatedByMe }}
+          <li>{{ .Title }} ({{ .Status }})</li>
+        {{ end }}
+      </ul>
+    {{ else }}
+      <p class="muted">No created tasks.</p>
+    {{ end }}
+  </div>
+</section>
+{{ end }}

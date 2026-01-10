@@ -1,0 +1,40 @@
+{{ define "user_info.html" }}
+<section class="page">
+  <h1>User Info</h1>
+
+  <div class="card">
+    {{ if .preferred_username }}
+      <p><b>Username:</b> {{ .preferred_username }}</p>
+    {{ else if .username }}
+      <p><b>Username:</b> {{ .username }}</p>
+    {{ end }}
+
+    {{ if .email }}
+      <p><b>Email:</b> {{ .email }}</p>
+    {{ end }}
+
+    {{ if .given_name }}
+      <p><b>First name:</b> {{ .given_name }}</p>
+    {{ end }}
+
+    {{ if .family_name }}
+      <p><b>Last name:</b> {{ .family_name }}</p>
+    {{ end }}
+
+    {{ if .sub }}
+      <p class="muted"><b>sub:</b> {{ .sub }}</p>
+    {{ end }}
+  </div>
+
+  {{ if .roles }}
+  <div class="card mt">
+    <div class="card-title">Roles</div>
+    <div>
+      {{ range .roles }}
+        <span class="pill">{{ . }}</span>
+      {{ end }}
+    </div>
+  </div>
+  {{ end }}
+</section>
+{{ end }}

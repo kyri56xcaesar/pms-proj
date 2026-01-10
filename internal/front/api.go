@@ -1,6 +1,7 @@
 package front
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	auth "kyri56xcaesar/pms-proj/internal/authmw"
 	"kyri56xcaesar/pms-proj/internal/utils"
 )
 
@@ -27,8 +29,11 @@ const (
 )
 
 var (
-	config Config
-	engine *gin.Engine
+	config    Config
+	engine    *gin.Engine
+	kcService *auth.Service
+	tpl       *template.Template
+	ds        Downstream
 )
 
 func setCors() {
@@ -71,7 +76,7 @@ func setTemplateEngine() {
 		"gr": func(a, b any) bool {
 			return utils.ToFloat64(a) > utils.ToFloat64(b)
 		},
-		"index": func(m map[int]any, key int) any {
+		"index": func(m map[string]int, key string) any {
 			if val, ok := m[key]; ok {
 				return val
 			}
@@ -88,8 +93,31 @@ func setTemplateEngine() {
 		"lower":     strings.ToLower,
 		"bytesToMB": bytesToMB,
 		"ago":       ago,
+		"include": func(name string, data any) template.HTML {
+			// name is the template name, e.g. "pages/dashboard.html"
+			var buf bytes.Buffer
+			if err := tpl.ExecuteTemplate(&buf, name, data); err != nil {
+				// show error in-page (dev friendly)
+				return template.HTML(fmt.Sprintf(`<pre style="color:#fb7185">include error: %v</pre>`, err))
+			}
+			return template.HTML(buf.String())
+		},
 	}
-	engine.SetHTMLTemplate(template.Must(template.New("").Funcs(funcMap).ParseGlob(templatesPath + "/*.html")))
+	t := template.New("").Funcs(funcMap)
+
+	t = template.Must(t.ParseGlob(templatesPath + "/*.html"))
+	t = template.Must(t.ParseGlob(templatesPath + "/partials/*.html"))
+	t = template.Must(t.ParseGlob(templatesPath + "/pages/*.html"))
+	// add more folders as needed:
+	// t = template.Must(t.ParseGlob(templatesPath + "/pages_admin/*.html"))
+
+	tpl = t
+	engine.SetHTMLTemplate(tpl)
+
+	// Optional: list loaded templates once
+	for _, tt := range tpl.Templates() {
+		log.Println("loaded template:", tt.Name())
+	}
 }
 
 func setRoutes() {
@@ -118,24 +146,39 @@ func setRoutes() {
 			c.HTML(http.StatusOK, "register.html", nil)
 		})
 
+		apiV1.POST("/logout", logoutHandler)
+
 		// handle post requests
 		apiV1.POST("/login", handleLogin)
 		apiV1.POST("/register", handleRegister)
 
 	}
 
-	verified := apiV1.Group("/authenticated")
+	kcAuth := mustInitKcAuth()
+	verified := apiV1.Group("/auth")
+	verified.Use(kcAuth.RequireRoles("student", "admin"))
+	verified.Use(auth.RequireEmailVerified())
 	// use middleware to check for authentication...
 	{
-		verified.GET("/user-info")
-		verified.GET("/dashboard")
-		verified.GET("/teams")
-		verified.GET("/mytasks")
+		verified.GET("/dashboard", dashboardHandler)
+		verified.GET("/myteams", myTeamsHandler)
+		verified.GET("/mytasks", myTasksHandler)
+
+		leader := verified.Group("/leader")
+		leader.Use(kcAuth.RequireRoles("leader", "admin"))
+		{
+
+		}
 
 		admin := verified.Group("/admin")
+		admin.Use(kcAuth.RequireRoles("admin"))
 		{
 			admin.GET("/users")
 			admin.GET("/teams")
+
+			admin.GET("/users/:id", handleAdminGetUserByID)
+			admin.POST("/users/:id/roles", handleAdminSetUserRoles)
+			admin.POST("/users/:id/active", handleAdminVerifyEmail)
 
 		}
 	}
@@ -146,9 +189,44 @@ func setRoutes() {
 
 }
 
+func mustInitKcAuth() *auth.KeycloakAuth {
+	issuer := fmt.Sprintf("http://%s/realms/%s", config.AuthAddress, config.Realm)
+	jwksURL := fmt.Sprintf("http://%s/realms/%s/protocol/openid-connect/certs", config.AuthAddress, config.Realm)
+
+	a, err := auth.NewKeycloakAuth(jwksURL, issuer, config.Audience, config.ClientID)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
 func InitAndServe(confPath string) {
 	// load configuration
 	config = loadConfig(confPath)
+
+	// create a keycloak client service adapter (init)
+	var err error
+	kcService, err = auth.NewService(
+		config.AuthAddress,
+		config.Realm,
+		config.ClientID,
+		config.Issuer,
+		config.Audience,
+		config.ClientSecret,
+	)
+	if err != nil {
+		log.Fatalf("failed to connect to KC: %v", err)
+	}
+
+	// set a downstream
+	ds = Downstream{
+		TeamBase: "http://" + config.TeamServiceAddress,
+		TaskBase: "http://" + config.TaskServiceAddress,
+		Client:   http.DefaultClient,
+	}
+
+	log.Printf("ds: %+v", ds)
+
 	// instantiate a new http server
 	engine = gin.Default()
 	setGinMode(config.ApiGinMode)

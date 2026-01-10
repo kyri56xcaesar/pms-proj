@@ -1,0 +1,53 @@
+{{ define "pages/mytasks.html" }}
+<section class="page">
+  <h1>My Tasks</h1>
+
+  <div class="card">
+    <p><b>Total assigned:</b> {{ .VM.TotalTasks }}</p>
+    <p class="muted">
+      TODO: {{ index .VM.StatusCounts "TODO" }} ·
+      IN_PROGRESS: {{ index .VM.StatusCounts "IN_PROGRESS" }} ·
+      DONE: {{ index .VM.StatusCounts "DONE" }}
+    </p>
+  </div>
+
+  {{ if .VM.Tasks }}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Team</th>
+          <th>Author</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .VM.Tasks }}
+        <tr>
+          <td><b>{{ .Title }}</b></td>
+          <td>{{ .Status }}</td>
+          <td>{{ .TeamID }}</td>
+          <td>{{ .Author }}</td>
+          <td class="right">
+            <!-- later: task detail page -->
+            <a class="btn btn-small" href="/api/v1/auth/tasks/{{ .TaskID }}">Open</a>
+
+            <!-- later: quick status change -->
+            <!-- Example placeholder -->
+            <!-- <form method="post" action="/api/v1/auth/tasks/{{ .TaskID }}/status" style="display:inline">
+              <input type="hidden" name="status" value="DONE"/>
+              <button class="btn btn-small" type="submit">Mark Done</button>
+            </form> -->
+          </td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+    <p class="muted">No tasks assigned to you.</p>
+  {{ end }}
+</section>
+{{ end }}

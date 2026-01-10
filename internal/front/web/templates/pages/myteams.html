@@ -1,0 +1,66 @@
+{{ define "pages/myteams.html" }}
+<section class="page">
+  <div class="page-head">
+    <h1>My Teams</h1>
+
+    {{ if .VM.CanManage }}
+      <a class="btn" href="/api/v1/auth/teams/new">+ Create Team</a>
+    {{ end }}
+  </div>
+
+  {{ if .VM.Rows }}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Team</th>
+          <th>Leader</th>
+          <th>Members</th>
+          <th>Tasks</th>
+          <th>Preview</th>
+          {{ if .VM.CanManage }}<th class="right">Actions</th>{{ end }}
+        </tr>
+      </thead>
+
+      <tbody>
+        {{ range .VM.Rows }}
+        <tr>
+          <td><b>{{ .Team.Name }}</b></td>
+          <td>{{ .Team.Leader }}</td>
+          <td>{{ .Team.MemberCount }}</td>
+
+          <td class="muted">
+            TODO: {{ index .Summary.Counts "TODO" }}<br/>
+            IN_PROGRESS: {{ index .Summary.Counts "IN_PROGRESS" }}<br/>
+            DONE: {{ index .Summary.Counts "DONE" }}<br/>
+            <b>Total:</b> {{ .Summary.Total }}
+          </td>
+
+          <td>
+            {{ if .Summary.PreviewTitles }}
+              <ul class="list-tight">
+                {{ range .Summary.PreviewTitles }}
+                  <li>{{ . }}</li>
+                {{ end }}
+              </ul>
+            {{ else }}
+              <span class="muted">No tasks</span>
+            {{ end }}
+          </td>
+
+          {{ if $.VM.CanManage }}
+          <td class="right">
+            <a class="btn btn-small" href="/api/v1/auth/teams/{{ .Team.TeamID }}/edit">Edit</a>
+            <a class="btn btn-small" href="/api/v1/auth/teams/{{ .Team.TeamID }}">Members</a>
+          </td>
+          {{ end }}
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+    <p class="muted">No teams found.</p>
+  {{ end }}
+</section>
+{{ end }}

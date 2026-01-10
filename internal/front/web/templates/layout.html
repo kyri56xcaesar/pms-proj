@@ -1,0 +1,41 @@
+{{ define "layout.html" }}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/api/v1/static/css/app.css"/>
+</head>
+<body>
+  <div class="app">
+    {{ template "partials/nav.html" . }}
+
+    <div class="content">
+      <!-- Top header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="app-name">TaskBoard</span>
+        </div>
+
+        <div class="topbar-right">
+          <div class="user-info">
+            <span class="user-name">{{ .User.Username }}</span>
+            <span class="user-email">{{ .User.Email }}</span>
+          </div>
+
+          <form method="post" action="/api/v1/logout">
+            <button class="btn btn-logout" type="submit">Logout</button>
+          </form>
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main class="main">
+        {{ include .Page . }}
+      </main>
+    </div>
+  </div>
+</body>
+</html>
+{{ end }}
