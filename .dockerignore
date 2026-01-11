@@ -1,1 +1,16 @@
-*.env
+.git
+.gitignore
+**/*_test.go
+**/tmp
+**/bin
+**/dist
+**/.DS_Store
+
+# local dev secrets
+config/*.env
+config/*.env.*
+config/*.local
+
+# editor junk
+.vscode
+.idea

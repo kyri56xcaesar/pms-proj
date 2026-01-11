@@ -5,6 +5,7 @@
   <div class="card">
     <p><b>Total teams:</b> {{ .VM.TotalTeams }}</p>
     <p><b>Total tasks:</b> {{ .VM.TotalTasks }}</p>
+    <p><b>Roles: {{ joinStrings .VM.User.Roles}}</b></p>
   </div>
 
   <div class="card">

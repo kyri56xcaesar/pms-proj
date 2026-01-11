@@ -6,5 +6,5 @@ import (
 
 func main() {
 
-	front.InitAndServe("./config/.env")
+	front.InitAndServe("./config/front.container.env")
 }

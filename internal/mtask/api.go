@@ -25,9 +25,10 @@ const (
 )
 
 var (
-	config Config
-	engine *gin.Engine
-	pool   *pgxpool.Pool
+	config      Config
+	engine      *gin.Engine
+	pool        *pgxpool.Pool
+	initSqlPath string = "./internal/mtask/db/init.sql"
 )
 
 func initDBConn() {
@@ -51,7 +52,7 @@ func initDBConn() {
 		log.Fatalf("failed to ping the db: %v", err)
 	}
 
-	b, err := os.ReadFile("internal/mtask/db/init.sql")
+	b, err := os.ReadFile(initSqlPath)
 	if err != nil {
 		log.Fatalf("failed to open and read the init sql file: %v", err)
 	}
@@ -98,10 +99,11 @@ func setRoutes() {
 	{
 		secure.GET("/mytask", handlePersonalTask)
 		secure.GET("/tasks", handleListTasks)
+		secure.GET("/tasks/:id", handleGetTaskByID) // NEW
+
 		secure.POST("/tasks", handleTaskCreate)
 		secure.PUT("/tasks", handleTaskUpdate)
 		secure.DELETE("/tasks", handleTaskDelete)
-
 		secure.PATCH("/change-status", handleTaskPatch)
 
 		secure.POST("/comments", handleCommentCreate)
@@ -112,6 +114,8 @@ func setRoutes() {
 
 func InitAndServe(confPath string) {
 	config = loadConfig(confPath)
+
+	initSqlPath = config.InitSQLPath
 
 	engine = gin.Default()
 	setGinMode(config.ApiGinMode)

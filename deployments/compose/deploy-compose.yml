@@ -1,0 +1,91 @@
+
+services:
+  kc-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${KC_DB_NAME}
+      POSTGRES_USER: ${KC_DB_USER}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    volumes:
+      - kc-db-data:/var/lib/postgresql/data
+
+  kc:
+    image: quay.io/keycloak/keycloak:26.5.0
+    depends_on:
+      - kc-db
+    ports:
+      - "${KEYCLOAK_PORT}:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: kc-db
+      KC_DB_URL_DATABASE: ${KC_DB_NAME}
+      KC_DB_USERNAME: ${KC_DB_USER}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    command: ["start-dev"]
+
+
+  api-db:
+    image: postgres:16
+    command: ["postgres", "-p", "5432"]
+    volumes:
+      - api-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+
+  mteam:
+    build:
+      context: ../../
+      dockerfile: build/Dockerfile
+      args:
+        SERVICE: mteam
+    container_name: mteam
+    env_file:
+      - ../../config/team.container.env
+    depends_on:
+      - api-db
+      - kc
+    ports:
+      - "${MTEAM_PORT}:${MTEAM_PORT}"
+
+  mtask:
+    build:
+      context: ../../
+      dockerfile: build/Dockerfile
+      args:
+        SERVICE: mtask
+    container_name: mtask
+    env_file:
+      - ../../config/task.container.env
+    depends_on:
+      - api-db
+      - kc
+    ports:
+      - "${MTASK_PORT}:${MTASK_PORT}"
+
+  front:
+    build:
+      context: ../../
+      dockerfile: build/Dockerfile
+      args:
+        SERVICE: front
+    container_name: front
+    env_file:
+      - ../../config/front.container.env
+    depends_on:
+      - kc
+      - mtask
+      - mteam
+    ports:
+      - "${FRONT_PORT}:${FRONT_PORT}"
+
+volumes:
+  kc-db-data:
+  api-db-data:

@@ -1,6 +1,6 @@
 create table if not exists tasks (
     taskid bigint generated always as identity primary key,
-    teamid bigint references teams(teamid),
+    teamid bigint references teams(teamid) on delete cascade,
     title text,
     description text,
     author text,
@@ -13,7 +13,7 @@ create table if not exists tasks (
 
 create table if not exists task_comments (
     commentid bigint generated always as identity primary key,
-    taskid bigint  references tasks(taskid),
+    taskid bigint  references tasks(taskid) on delete cascade,
     author text,
     body       text not null,
     created_at timestamptz not null default now()

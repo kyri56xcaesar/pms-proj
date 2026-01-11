@@ -22,6 +22,7 @@ type TeamMember struct {
 type CreateTeamRequest struct {
 	Name        string `json:"name" form:"name" binding:"required,min=2,max=64"`
 	Description string `json:"description" form:"description" binding:"max=500"`
+	Leader      string `json:"leader" form:"leader" binding:"required"`
 }
 
 type UpdateTeamRequest struct {
@@ -40,4 +41,9 @@ type Task struct {
 	Deadline    time.Time `json:"deadline"`
 	Priority    string    `json:"priority"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type AddTeamMemberRequest struct {
+	Username string `json:"username" binding:"required"`
+	Role     string `json:"role"` // optional; default member
 }

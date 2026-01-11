@@ -3,17 +3,33 @@
   <div class="page-head">
     <h1>My Teams</h1>
 
-    {{ if .VM.CanManage }}
-      <a class="btn" href="/api/v1/auth/teams/new">+ Create Team</a>
+    {{ if .VM.CanCreate }}
+      <button class="btn" type="button"
+        onclick="document.getElementById('createTeamModal').showModal()">
+        + Create Team
+      </button>
     {{ end }}
   </div>
 
   {{ if .VM.Rows }}
   <div class="card">
     <table class="table">
+      <colgroup>
+        <col style="width: 10%">
+        <col style="width: 10%">
+        <col style="width: 10%">
+        <col style="width: 5%">
+        <col style="width: 100px">
+        <col style="width: 400px"> <!-- Actions -->
+        <col style="width: 200px"> <!-- Actions -->
+        <col style="width: 420px"> <!-- Actions -->
+        
+      </colgroup>
       <thead>
         <tr>
+          <th>TeamID</th>
           <th>Team</th>
+          <th>Description</th>
           <th>Leader</th>
           <th>Members</th>
           <th>Tasks</th>
@@ -25,9 +41,22 @@
       <tbody>
         {{ range .VM.Rows }}
         <tr>
+          <td><b>{{ .Team.TeamID }}</b></td>
           <td><b>{{ .Team.Name }}</b></td>
+          <td class="muted">{{ .Team.Description }}</td>
           <td>{{ .Team.Leader }}</td>
-          <td>{{ .Team.MemberCount }}</td>
+          <td>
+            {{ .Team.MemberCount }}
+            {{ if .Team.Members }}
+              <div class="pill-row">
+                {{ range .Team.Members }}
+                  <span class="pill">{{ .Username }}</span>
+                {{ end }}
+              </div>
+            {{ else }}
+              <span class="muted">none</span>
+            {{ end }}
+          </td>
 
           <td class="muted">
             TODO: {{ index .Summary.Counts "TODO" }}<br/>
@@ -37,21 +66,48 @@
           </td>
 
           <td>
-            {{ if .Summary.PreviewTitles }}
+            {{ if .Summary.Preview }}
               <ul class="list-tight">
-                {{ range .Summary.PreviewTitles }}
-                  <li>{{ . }}</li>
+                {{ range .Summary.Preview }}
+                  <li>
+                    <button type="button" class="linklike" onclick="openTask('{{ .TaskID }}')">
+                      {{ .Title }}
+                    </button>
+                  </li>
                 {{ end }}
               </ul>
             {{ else }}
               <span class="muted">No tasks</span>
             {{ end }}
+
           </td>
 
           {{ if $.VM.CanManage }}
-          <td class="right">
-            <a class="btn btn-small" href="/api/v1/auth/teams/{{ .Team.TeamID }}/edit">Edit</a>
-            <a class="btn btn-small" href="/api/v1/auth/teams/{{ .Team.TeamID }}">Members</a>
+          <td class="right actions">
+            <!-- Edit -->
+            <button class="btn btn-small" type="button"
+              onclick="openEditTeam('{{ .Team.TeamID }}','{{ js .Team.Name }}','{{ js .Team.Description }}')">
+              Edit
+            </button>
+
+            <!-- Members -->
+            <button class="btn btn-small" type="button"
+              onclick="openMembers('{{ .Team.TeamID }}')">
+              Members
+            </button>
+
+            <!-- Delete (ADMIN ONLY) -->
+            {{ if $.VM.IsAdmin }}
+            <form method="post"
+                  action="/api/v1/auth/admin/teams/{{ .Team.TeamID }}/delete"
+                  style="display:inline">
+              <button class="btn btn-small btn-danger"
+                      type="submit"
+                      onclick="return confirm('Delete team {{ .Team.Name }}? This cannot be undone.');">
+                Delete
+              </button>
+            </form>
+            {{ end }}
           </td>
           {{ end }}
         </tr>
@@ -62,5 +118,109 @@
   {{ else }}
     <p class="muted">No teams found.</p>
   {{ end }}
+
+  {{/* Create Team Modal (admin only) */}}
+  {{ if .VM.CanCreate }}
+  <dialog id="createTeamModal">
+    <form method="post" action="/api/v1/auth/admin/teams/create" class="modal">
+      <h3>Create team</h3>
+
+      <label>Name</label>
+      <input name="name" required maxlength="80"/>
+
+      <label>Description</label>
+      <textarea name="description" maxlength="500"></textarea>
+
+      <label>Leader</label>
+      <select name="leader" required>
+        <option value="" disabled selected>Select leader</option>
+        {{ range .VM.Users }}
+          <option value="{{ .Username }}">{{ .Username }}{{ if .Email }} ({{ .Email }}){{ end }}</option>
+        {{ end }}
+      </select>
+
+      <div class="row right">
+        <button class="btn positive-btn" type="submit">Create</button>
+        <button class="btn btn-secondary" type="button"
+          onclick="document.getElementById('createTeamModal').close()">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </dialog>
+  {{ end }}
+
+  {{/* Edit Team Modal */}}
+  {{ if .VM.CanManage }}
+  <dialog id="editTeamModal">
+    <form method="post" action="/api/v1/auth/leader/teams/edit" class="modal">
+      <h3>Edit team</h3>
+      <input type="hidden" name="teamid" id="editTeamID"/>
+
+      <label>Name</label>
+      <input name="name" id="editTeamName" required maxlength="80"/>
+
+      <label>Description</label>
+      <textarea name="description" id="editTeamDesc" maxlength="500"></textarea>
+
+      <div class="row right">
+        <button class="btn positive-btn" type="submit">Save</button>
+        <button class="btn btn-secondary" type="button"
+          onclick="document.getElementById('editTeamModal').close()">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="membersModal">
+    <form method="post" action="/api/v1/auth/leader/teams/member/add" class="modal">
+      <h3>Team members</h3>
+      <input type="hidden" name="teamid" id="membersTeamID"/>
+
+      <label>Add member</label>
+      <div class="row">
+        <input name="username" maxlength="80" placeholder="username"/>
+        <button class="btn positive-btn" type="submit">Add</button>
+      </div>
+    </form>
+
+      <hr/>
+
+      <label>Remove member</label>
+      <form method="post" action="/api/v1/auth/leader/teams/member/remove">
+        <input type="hidden" name="teamid" id="removeTeamID"/>
+        <div class="row">
+          <input name="username" maxlength="80" placeholder="username"/>
+          <button class="btn btn-secondary negative-btn" type="submit">Remove</button>
+        </div>
+      </form>
+
+      <div class="row right">
+        <button class="btn btn-secondary" type="button"
+          onclick="document.getElementById('membersModal').close()">
+          Close
+        </button>
+      </div>
+  </dialog>
+
+  <script>
+    function openEditTeam(id, name, desc) {
+      document.getElementById('editTeamID').value = id;
+      document.getElementById('editTeamName').value = name;
+      document.getElementById('editTeamDesc').value = desc || "";
+      document.getElementById('editTeamModal').showModal();
+    }
+    function openMembers(teamId) {
+      document.getElementById('membersTeamID').value = teamId;
+      document.getElementById('removeTeamID').value = teamId;
+      document.getElementById('membersModal').showModal();
+    }
+  </script>
+  {{ end }}
+
 </section>
+{{ template "partials/task_modal.html" . }}
 {{ end }}
+
+

@@ -25,9 +25,10 @@ const (
 )
 
 var (
-	config Config
-	engine *gin.Engine
-	pool   *pgxpool.Pool
+	config      Config
+	engine      *gin.Engine
+	pool        *pgxpool.Pool
+	initSqlPath string = "./internal/mteam/db/init.sql"
 )
 
 func initDBConn() {
@@ -51,7 +52,7 @@ func initDBConn() {
 		log.Fatalf("failed to ping the db: %v", err)
 	}
 
-	b, err := os.ReadFile("internal/mteam/db/init.sql")
+	b, err := os.ReadFile(initSqlPath)
 	if err != nil {
 		log.Fatalf("failed to open and read the init sql file: %v", err)
 	}
@@ -100,6 +101,12 @@ func setRoutes() {
 	{
 		auth.GET("/my-teams", handleMyTeams)
 	}
+	leader := root.Group("/leader")
+	leader.Use(kcAuth.RequireRoles("leader", "admin"))
+	{
+		leader.POST("/teams/:teamid/members", addTeamMemberHandler)
+		leader.DELETE("/teams/:teamid/members/:username", removeTeamMemberHandler)
+	}
 	admin := root.Group("/admin")
 	admin.Use(kcAuth.RequireRoles("admin"))
 	{
@@ -112,6 +119,8 @@ func setRoutes() {
 
 func InitAndServe(confPath string) {
 	config = loadConfig(confPath)
+
+	initSqlPath = config.InitSQLPath
 
 	engine = gin.Default()
 	setGinMode(config.ApiGinMode)

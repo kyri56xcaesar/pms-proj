@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,6 +18,9 @@ type Config struct {
 	Profile    string
 	Verbose    bool
 	ApiGinMode string
+
+	TemplatesPath string
+	StaticsPath   string
 
 	Ip                 string
 	Port               string
@@ -37,13 +41,30 @@ type Config struct {
 }
 
 func loadConfig(path string) Config {
-	if err := godotenv.Load(path); err != nil {
-		log.Printf("Failed to load the config file at %s, using default ones...", path)
+
+	// 1. Get the absolute path
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		log.Printf("Error determining absolute path: %v", err)
+		// Fallback to original path or handle error
+		absPath = path
+	}
+
+	// 2. Clean the path (removes redundant dots like /foo/bar/./.env)
+	absPath = filepath.Clean(absPath)
+
+	log.Printf("Attempting to load config from absolute path: %s", absPath)
+
+	// 3. Load the environment file
+	if err := godotenv.Load(absPath); err != nil {
+		log.Printf("Failed to load the config file at %s, using default ones...", absPath)
 	}
 
 	s := strings.Split(path, "/")
 	config := Config{
 		ConfigPath:         s[len(s)-1],
+		TemplatesPath:      getEnv("TEMPLATES_PATH", "./internal/front/web/templates"),
+		StaticsPath:        getEnv("STATICS_PATH", "./internal/front/web/static"),
 		Profile:            getEnv("PROFILE", "baremetal"),
 		Verbose:            getBoolEnv("VERBOSE", "true"),
 		ApiGinMode:         getEnv("GIN_MODE", "debug"),

@@ -13,10 +13,11 @@ import (
 )
 
 type Config struct {
-	ConfigPath string
-	Profile    string
-	Verbose    bool
-	ApiGinMode string
+	ConfigPath  string
+	Profile     string
+	Verbose     bool
+	ApiGinMode  string
+	InitSQLPath string
 
 	Ip                 string
 	Port               string
@@ -49,10 +50,12 @@ func loadConfig(path string) Config {
 
 	s := strings.Split(path, "/")
 	config := Config{
-		ConfigPath:         s[len(s)-1],
-		Profile:            getEnv("PROFILE", "baremetal"),
-		Verbose:            getBoolEnv("VERBOSE", "true"),
-		ApiGinMode:         getEnv("GIN_MODE", "debug"),
+		ConfigPath:  s[len(s)-1],
+		Profile:     getEnv("PROFILE", "baremetal"),
+		Verbose:     getBoolEnv("VERBOSE", "true"),
+		ApiGinMode:  getEnv("GIN_MODE", "debug"),
+		InitSQLPath: getEnv("INIT_SQL_PATH", "./internal/mteam/db/init.sql"),
+
 		Ip:                 getEnv("IP", "localhost"),
 		Port:               getEnv("PORT", "5045"),
 		AuthAddress:        getEnv("AUTH_ADDRESS", "localhost:5555"),

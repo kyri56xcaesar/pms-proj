@@ -1,30 +1,112 @@
-{{ define "pages/admin_teams.html" }}
-<section class="page">
-  <h1>Admin · Teams</h1>
+{{ define "pages_admin/admin_teams.html" }}
 
-  {{ if .VM.Teams }}
+
+<section class="page">
+    <h1>Admin · Teams</h1>
+  
+  {{ if .VM.Rows }}
   <div class="card">
     <table class="table">
+ <colgroup>
+    <col style="width: 70px">     {{/* ID */}}
+    <col style="width: 16%">      {{/* Team */}}
+    <col style="width: 18%">      {{/* Description */}}
+    <col style="width: 12%">      {{/* Leader */}}
+    <col style="width: 18%">      {{/* Members */}}
+    <col style="width: 14%">      {{/* Tasks summary */}}
+    <col style="width: 10%">     {{/* Preview */}}
+    <col style="width: 360px">    {{/* Actions */}}
+  </colgroup>
       <thead>
         <tr>
           <th>ID</th>
-          <th>Name</th>
+          <th>Team</th>
+          <th>Description</th>
           <th>Leader</th>
           <th>Members</th>
+          <th>Tasks</th>
+          <th>Preview</th>
           <th class="right">Actions</th>
         </tr>
       </thead>
       <tbody>
-        {{ range .VM.Teams }}
+        {{ range .VM.Rows }}
         <tr>
-          <td>{{ .TeamID }}</td>
-          <td><b>{{ .Name }}</b></td>
-          <td>{{ .Leader }}</td>
-          <td>{{ .MemberCount }}</td>
-          <td class="right">
-            <!-- later: details/edit page -->
-            <a class="btn btn-small" href="/api/v1/auth/admin/teams/{{ .TeamID }}">Open</a>
+          <td>{{ .Team.TeamID }}</td>
+          <td><b>{{ .Team.Name }}</b></td>
+          <td class="muted">{{ .Team.Description }}</td>
+          <td>{{ .Team.Leader }}</td>
+
+          <td>
+            <div class="muted">{{ .Team.MemberCount }} members</div>
+            {{ if .Team.Members }}
+              <div class="pill-row">
+                {{ range .Team.Members }}
+                  <span class="pill">{{ .Username }}</span>
+                {{ end }}
+              </div>
+            {{ else }}
+              <span class="muted">none</span>
+            {{ end }}
           </td>
+
+          <td class="muted">
+            TODO: {{ index .StatusCounts "TODO" }}<br/>
+            IN_PROGRESS: {{ index .StatusCounts "IN_PROGRESS" }}<br/>
+            DONE: {{ index .StatusCounts "DONE" }}<br/>
+            <b>Total:</b> {{ .TotalTasks }}
+          </td>
+
+          <td>
+            {{ if .PreviewTitles }}
+              <ul class="list-tight">
+                {{ range .PreviewTitles }}
+                  <li>{{ . }}</li>
+                {{ end }}
+              </ul>
+            {{ else }}
+              <span class="muted">No tasks</span>
+            {{ end }}
+          </td>
+
+          <td class="right actions">
+            <button class="btn btn-small" type="button"
+              class="open-details-btn"
+              data-id="{{ .Team.TeamID }}"
+              data-name="{{ .Team.Name }}"
+              data-desc="{{ .Team.Description }}"
+              data-leader="{{ .Team.Leader }}"
+              data-membercount="{{ .Team.MemberCount }}"
+              data-members="{{ joinUsernames .Team.Members }}"
+              data-todo="{{ index .StatusCounts "TODO" }}"
+              data-progress="{{ index .StatusCounts "IN_PROGRESS" }}"
+              data-done="{{ index .StatusCounts "DONE" }}"
+              data-total="{{ .TotalTasks }}"
+              data-preview="{{ joinTitles .PreviewTitles }}"
+              onclick="openAdminDetails(this)">
+              Open
+            </button>
+
+            
+          
+            <button class="btn btn-small" type="button"
+              onclick="openAdminEditTeam('{{ .Team.TeamID }}','{{ js .Team.Name }}','{{ js .Team.Description }}')">
+              Edit
+            </button>
+          
+            <button class="btn btn-small" type="button"
+              onclick="openAdminMembers('{{ .Team.TeamID }}')">
+              Members
+            </button>
+          
+            <form method="post" action="/api/v1/auth/admin/teams/{{ .Team.TeamID }}/delete" style="display:inline">
+              <button class="btn btn-small btn-danger" type="submit"
+                onclick="return confirm('Delete team {{ .Team.Name }}? This will delete tasks too.');">
+                Delete
+              </button>
+            </form>
+          </td>
+
         </tr>
         {{ end }}
       </tbody>
@@ -33,5 +115,154 @@
   {{ else }}
     <p class="muted">No teams found.</p>
   {{ end }}
+
+  {{/* Edit Team Modal */}}
+  <dialog id="adminEditTeamModal">
+    <form method="post" action="/api/v1/auth/leader/teams/edit" class="modal">
+      <h3>Edit team</h3>
+      <input type="hidden" name="teamid" id="adminEditTeamID"/>
+
+      <label>Name</label>
+      <input name="name" id="adminEditTeamName" required maxlength="80"/>
+
+      <label>Description</label>
+      <textarea name="description" id="adminEditTeamDesc" maxlength="500"></textarea>
+
+      <div class="row right">
+        <button class="btn" type="submit">Save</button>
+        <button class="btn btn-secondary" type="button"
+          onclick="document.getElementById('adminEditTeamModal').close()">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  {{/* Members Modal (two separate forms, no nesting) */}}
+  <dialog id="adminMembersModal">
+    <div class="modal">
+      <h3>Team members</h3>
+
+      <form method="post" action="/api/v1/auth/leader/teams/member/add">
+        <input type="hidden" name="teamid" id="adminMembersTeamID"/>
+
+        <label>Add member (username)</label>
+        <div class="row">
+          <input name="username" maxlength="80" placeholder="username" required />
+          <button class="btn" type="submit">Add</button>
+        </div>
+      </form>
+
+      <hr/>
+
+      <form method="post" action="/api/v1/auth/leader/teams/member/remove">
+        <input type="hidden" name="teamid" id="adminRemoveTeamID"/>
+
+        <label>Remove member (username)</label>
+        <div class="row">
+          <input name="username" maxlength="80" placeholder="username" required />
+          <button class="btn btn-secondary" type="submit">Remove</button>
+        </div>
+      </form>
+
+      <div class="row right">
+        <button class="btn btn-secondary" type="button"
+          onclick="document.getElementById('adminMembersModal').close()">
+          Close
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+<dialog id="adminDetailsModal">
+  <div class="modal">
+    <h3 id="dTeamName"></h3>
+
+    <p class="muted" id="dTeamDesc"></p>
+
+    <div class="kv">
+      <div><b>ID:</b> <span id="dTeamID"></span></div>
+      <div><b>Leader:</b> <span id="dTeamLeader"></span></div>
+      <div><b>Members:</b> <span id="dTeamMembers"></span></div>
+    </div>
+
+    <hr/>
+
+    <h4>Tasks</h4>
+    <div class="muted">
+      TODO: <span id="dTodo"></span><br/>
+      IN_PROGRESS: <span id="dProgress"></span><br/>
+      DONE: <span id="dDone"></span><br/>
+      <b>Total:</b> <span id="dTotal"></span>
+    </div>
+
+    <h4>Preview</h4>
+    <ul id="dPreview" class="list-tight"></ul>
+
+    <div class="row right">
+      <button class="btn btn-secondary" type="button"
+        onclick="document.getElementById('adminDetailsModal').close()">
+        Close
+      </button>
+    </div>
+  </div>
+</dialog>
+
+
+  <script>
+    function openAdminEditTeam(id, name, desc) {
+      document.getElementById('adminEditTeamID').value = id;
+      document.getElementById('adminEditTeamName').value = name;
+      document.getElementById('adminEditTeamDesc').value = desc || "";
+      document.getElementById('adminEditTeamModal').showModal();
+    }
+
+    function openAdminMembers(teamId) {
+      document.getElementById('adminMembersTeamID').value = teamId;
+      document.getElementById('adminRemoveTeamID').value = teamId;
+      document.getElementById('adminMembersModal').showModal();
+    }
+
+    function openAdminDetails(
+    id, name, desc, leader, memberCount, membersCSV,
+    todo, progress, done, total, previewCSV
+  ) {
+    document.getElementById('dTeamID').textContent = id;
+    document.getElementById('dTeamName').textContent = name;
+    document.getElementById('dTeamDesc').textContent = desc || 'No description';
+    document.getElementById('dTeamLeader').textContent = leader || '-';
+    document.getElementById('dTeamMembers').textContent =
+      memberCount + ' (' + (membersCSV || 'none') + ')';
+
+    document.getElementById('dTodo').textContent = todo;
+    document.getElementById('dProgress').textContent = progress;
+    document.getElementById('dDone').textContent = done;
+    document.getElementById('dTotal').textContent = total;
+
+    const ul = document.getElementById('dPreview');
+    ul.innerHTML = '';
+    if (previewCSV) {
+      previewCSV.split('|').forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        ul.appendChild(li);
+      });
+    } else {
+      const li = document.createElement('li');
+      li.textContent = 'No tasks';
+      ul.appendChild(li);
+    }
+
+    document.getElementById('adminDetailsModal').showModal();
+  }
+  </script>
+
+  
 </section>
+{{ template "partials/task_modal.html" . }}
+
+
 {{ end }}
+
+
+

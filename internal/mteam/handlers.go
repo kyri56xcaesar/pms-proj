@@ -1,8 +1,10 @@
 package mteam
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -17,20 +19,27 @@ func createHandler(c *gin.Context) {
 	if err := c.ShouldBind(&req); err != nil {
 		log.Printf("failed to bind input: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
-
 		return
 	}
 
 	authorAny, _ := c.Get("kc.username")
-	id, err := CreateTeam(c.Request.Context(), req.Name, req.Description, authorAny.(string))
+	createdBy := authorAny.(string)
+
+	teamID, err := CreateTeam(c.Request.Context(), req.Name, req.Description, createdBy)
 	if err != nil {
 		log.Printf("failed to create the entity: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
-
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"status": "ok", "teamid": id})
+	// Assign selected leader as member(role=leader)
+	if err := AddMember(c.Request.Context(), teamID, req.Leader, "leader"); err != nil {
+		log.Printf("failed to add leader member: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error (add leader)"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"status": "ok", "teamid": teamID})
 }
 
 func updateHandler(c *gin.Context) {
@@ -164,4 +173,110 @@ func handleMyTeams(c *gin.Context) {
 
 	payload := gin.H{"items": teams, "limit": limit}
 	c.JSON(http.StatusOK, payload)
+}
+
+func addTeamMemberHandler(c *gin.Context) {
+	teamIDStr := c.Param("teamid")
+	teamID, err := strconv.ParseInt(teamIDStr, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid teamid"})
+		return
+	}
+
+	var req AddTeamMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
+		return
+	}
+
+	role := strings.TrimSpace(req.Role)
+	if role == "" {
+		role = "member"
+	}
+
+	// Optional: validate role
+	switch role {
+	case "member", "leader":
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
+		return
+	}
+
+	// Optional but recommended: leader-only can manage only their teams
+	if err := ensureCanManageTeam(c, teamID); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := AddMember(c.Request.Context(), teamID, req.Username, role); err != nil {
+		log.Printf("add member failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func removeTeamMemberHandler(c *gin.Context) {
+	teamIDStr := c.Param("teamid")
+	teamID, err := strconv.ParseInt(teamIDStr, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid teamid"})
+		return
+	}
+
+	username := strings.TrimSpace(c.Param("username"))
+	if username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username required"})
+		return
+	}
+
+	if err := ensureCanManageTeam(c, teamID); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := RemoveMember(c.Request.Context(), teamID, username); err != nil {
+		log.Printf("remove member failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func ensureCanManageTeam(c *gin.Context, teamID int64) error {
+	// admin can manage all
+	rolesAny, _ := c.Get("kc.roles")
+	roles, _ := rolesAny.([]string)
+	for _, r := range roles {
+		if r == "admin" {
+			return nil
+		}
+	}
+
+	// leader must be leader of this team
+	usernameAny, _ := c.Get("kc.username")
+	username := usernameAny.(string)
+
+	ok, err := IsLeaderOfTeam(c.Request.Context(), teamID, username)
+	if err != nil {
+		log.Printf("IsLeaderOfTeam failed: %v", err)
+		return fmt.Errorf("db error")
+	}
+	if !ok {
+		return fmt.Errorf("not allowed")
+	}
+	return nil
+}
+
+func IsLeaderOfTeam(ctx context.Context, teamID int64, username string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `
+        SELECT EXISTS (
+            SELECT 1 FROM team_members
+            WHERE teamid = $1 AND username = $2 AND role = 'leader'
+        )
+    `, teamID, username).Scan(&exists)
+	return exists, err
 }

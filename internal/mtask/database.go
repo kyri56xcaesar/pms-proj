@@ -2,6 +2,7 @@ package mtask
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -155,13 +156,18 @@ func ListTasks(ctx context.Context, f ListTasksFilter) ([]Task, error) {
 	return out, rows.Err()
 }
 
-func CreateComment(ctx context.Context, author string, req CreateCommentRequest) (int64, error) {
+func CreateComment(ctx context.Context, taskID int64, author, body string) (int64, error) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return 0, fmt.Errorf("empty body")
+	}
+
 	var id int64
 	err := pool.QueryRow(ctx, `
 		INSERT INTO task_comments (taskid, author, body)
-		VALUES ($1,$2,$3)
+		VALUES ($1, $2, $3)
 		RETURNING commentid
-	`, req.TaskID, author, req.Body).Scan(&id)
+	`, taskID, author, body).Scan(&id)
 	return id, err
 }
 
@@ -189,6 +195,69 @@ func ListComments(ctx context.Context, taskID int64, limit int) ([]Comment, erro
 		ORDER BY created_at ASC
 		LIMIT $2
 	`, taskID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]Comment, 0, limit)
+	for rows.Next() {
+		var cmt Comment
+		if err := rows.Scan(&cmt.CommentID, &cmt.TaskID, &cmt.Author, &cmt.Body, &cmt.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, cmt)
+	}
+	return out, rows.Err()
+}
+
+func GetTaskByID(ctx context.Context, taskID int64) (*Task, error) {
+	row := pool.QueryRow(ctx, `
+		SELECT taskid, teamid, COALESCE(title,''), COALESCE(description,''),
+		       COALESCE(author,''), COALESCE(assignee,''), COALESCE(status,''),
+		       deadline, COALESCE(priority,''), created_at
+		FROM tasks
+		WHERE taskid = $1
+	`, taskID)
+
+	var t Task
+	var deadline sql.NullTime
+
+	if err := row.Scan(
+		&t.TaskID,
+		&t.TeamID,
+		&t.Title,
+		&t.Description,
+		&t.Author,
+		&t.Assignee,
+		&t.Status,
+		&deadline,
+		&t.Priority,
+		&t.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	if deadline.Valid {
+		t.Deadline = deadline.Time
+	}
+
+	return &t, nil
+}
+
+func ListCommentsByTaskID(ctx context.Context, taskID int64, limit int, order string) ([]Comment, error) {
+	orderSQL := "created_at ASC"
+	if order == "created_desc" {
+		orderSQL = "created_at DESC"
+	}
+
+	rows, err := pool.Query(ctx, fmt.Sprintf(`
+		SELECT commentid, taskid, COALESCE(author,''), body, created_at
+		FROM task_comments
+		WHERE taskid = $1
+		ORDER BY %s
+		LIMIT $2
+	`, orderSQL), taskID, limit)
 	if err != nil {
 		return nil, err
 	}

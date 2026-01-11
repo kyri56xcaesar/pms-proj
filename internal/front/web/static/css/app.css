@@ -123,3 +123,312 @@ body{
   color:#fb7185;
   border-color: rgba(251,113,133,.4);
 }
+
+
+/* =========================
+   Modal (dialog) styling
+   ========================= */
+
+dialog {
+  border: none;
+  border-radius: 10px;
+  padding: 0;
+  width: 100%;
+  max-width: 520px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* inner modal content */
+dialog .modal {
+  padding: 1.5rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+dialog h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+/* inputs */
+dialog label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #444;
+}
+
+dialog input,
+dialog textarea,
+dialog select {
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 0.9rem;
+}
+
+dialog textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* footer row */
+dialog .row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+dialog .row.right {
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+/* divider */
+dialog hr {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 0.75rem 0;
+}
+
+
+.btn-danger {
+  background: #d9534f;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #c9302c;
+}
+
+.btn-secondary {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #d0d0d0;
+}
+
+
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
+
+.actions {
+  white-space: nowrap;
+}
+
+.actions .btn {
+  margin-left: 0.25rem;
+}
+
+.positive-btn {
+  background-color: blue !important;
+}
+
+
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+
+/* Tables: consistent vertical alignment */
+.table td, .table th {
+  vertical-align: top;
+}
+
+/* Keep actions aligned and stable width */
+.actions {
+  white-space: nowrap;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+/* Uniform button sizing */
+.btn.btn-small {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.1;
+  min-width: 74px;          /* << makes all action buttons same width */
+  text-align: center;
+}
+
+/* Make danger/secondary consistent too */
+.btn-danger { background: #d9534f; color: #fff; border: 1px solid #d9534f; }
+.btn-danger:hover { background: #c9302c; border-color: #c9302c; }
+
+.btn-secondary { background: #e7e7e7; color: #333; border: 1px solid #d0d0d0; }
+.btn-secondary:hover { background: #dcdcdc; }
+
+/* Pills layout */
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+.pill {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  font-size: 0.8rem;
+}
+
+/* Modal improvements */
+dialog {
+  border: none;
+  border-radius: 12px;
+  padding: 0;
+  width: 100%;
+  max-width: 560px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.28);
+}
+dialog::backdrop { background: rgba(0,0,0,0.45); }
+
+dialog .modal {
+  padding: 1.25rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.modal-head h3 { margin: 0; }
+.modal-sub { margin: 0; color: #666; font-size: 0.9rem; }
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Roles modal list */
+.roles-grid {
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 0.75rem;
+  max-height: 240px;       /* scroll if many roles */
+  overflow: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.75rem;
+}
+
+.role-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roles-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.roles-toolbar .left,
+.roles-toolbar .right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.small-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #3b82f6;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.small-link:hover { text-decoration: underline; }
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  font-size: 0.8rem;
+}
+.status-badge.ok { border-color: #b7e1c1; background: green; }
+.status-badge.warn { border-color: #f2d08f; background: #fff7e6; }
+
+
+.table {
+  width: 100%;
+  table-layout: fixed;   /* 🔑 critical */
+}
+
+.table th {
+  font-size: larger;
+}
+
+.table th,
+.table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+
+  text-align: center;
+
+  margin-top: 20px;
+}
+.table td.actions {
+  height: 100%;
+  align-items: stretch;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.table tbody {
+  margin-top: 20px;
+}
+
+.table tbody tr {
+  transition: background 0.12s ease;
+}
+
+
+.green-btn {
+  background-color: green;
+}
+
+.linklike {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #3b82f6;
+  cursor: pointer;
+  text-align: left;
+}
+.linklike:hover { text-decoration: underline; }

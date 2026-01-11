@@ -1,6 +1,7 @@
 package mtask
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
@@ -137,7 +138,8 @@ func handleTaskPatch(c *gin.Context) {
 		return
 	}
 	status := c.Query("status")
-	if validStatus(status) {
+	log.Printf("status: %s", status)
+	if !validStatus(status) {
 		c.JSON(400, gin.H{"error": "invalid status"})
 
 		return
@@ -166,13 +168,112 @@ func handlePersonalTask(c *gin.Context) {
 }
 
 func handleCommentCreate(c *gin.Context) {
+	var req CreateCommentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
+		return
+	}
+	if req.TaskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "taskid required"})
+		return
+	}
+	body := strings.TrimSpace(req.Body)
+	if body == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "body required"})
+		return
+	}
+	if len(body) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "body too long"})
+		return
+	}
 
+	authorAny, _ := c.Get("kc.username")
+	author := authorAny.(string)
+
+	// OPTIONAL AUTHZ (recommended): ensure caller can view task/team
+	// task, err := GetTaskByID(c.Request.Context(), req.TaskID)
+	// ... check membership/admin ...
+
+	id, err := CreateComment(c.Request.Context(), req.TaskID, author, body)
+	if err != nil {
+		log.Printf("failed to create comment: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"status":    "ok",
+		"commentid": id,
+	})
 }
 
 func handleCommentDelete(c *gin.Context) {
 
 }
 
-func handleCommentList(c *gin.Context) {
+func handleGetTaskByID(c *gin.Context) {
+	idStr := strings.TrimSpace(c.Param("id"))
+	taskID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
 
+	task, err := GetTaskByID(c.Request.Context(), taskID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+		log.Printf("failed to get task: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, task)
+}
+
+func handleCommentList(c *gin.Context) {
+	taskIDStr := strings.TrimSpace(c.Query("taskid"))
+	if taskIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "taskid required"})
+		return
+	}
+	taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid taskid"})
+		return
+	}
+
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad limit"})
+		return
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	order := c.DefaultQuery("order", "created_asc")
+	if order != "created_asc" && order != "created_desc" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad order"})
+		return
+	}
+
+	items, err := ListCommentsByTaskID(c.Request.Context(), taskID, limit, order)
+	if err != nil {
+		log.Printf("failed to list comments: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":  items,
+		"taskid": taskID,
+		"limit":  limit,
+		"order":  order,
+	})
 }

@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	mtask.InitAndServe("./config/task.env")
+	mtask.InitAndServe("./config/task.container.env")
 }

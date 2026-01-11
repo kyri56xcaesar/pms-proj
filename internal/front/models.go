@@ -44,12 +44,15 @@ type TaskListResponse struct {
 }
 
 type UserVM struct {
-	Username  string
-	Firstname string
-	Lastname  string
-	Email     string
-	IsAdmin   bool
-	Roles     []string
+	ID            string `json:"id"`
+	Username      string
+	Firstname     string
+	Lastname      string
+	Email         string
+	IsAdmin       bool
+	Enabled       bool `json:"enabled"`
+	EmailVerified bool `json:"emailVerified"`
+	Roles         []string
 }
 
 type DashboardVM struct {
@@ -69,16 +72,25 @@ type DashboardVM struct {
 	Teams []Team
 }
 
+type TaskPreviewItem struct {
+	TaskID int64
+	Title  string
+}
+
 type TeamTasksSummary struct {
-	TeamID        int64
-	Counts        map[string]int // TODO/IN_PROGRESS/DONE
-	Total         int
-	PreviewTitles []string // optional
+	TeamID int64
+	Counts map[string]int // TODO/IN_PROGRESS/DONE
+	Total  int
+
+	Preview []TaskPreviewItem // NEW (replaces PreviewTitles)}
 }
 
 type MyTeamRowVM struct {
+	TeamID  int64
 	Team    Team
 	Summary TeamTasksSummary
+
+	Preview []TaskPreviewItem // NEW (replaces PreviewTitles)
 }
 
 type MyTeamsVM struct {
@@ -88,18 +100,52 @@ type MyTeamsVM struct {
 
 	IsAdmin   bool
 	IsLeader  bool
+	CanCreate bool // admin only
 	CanManage bool
 
-	Rows []MyTeamRowVM
+	Rows  []MyTeamRowVM
+	Users []UserPick
 }
-
 type MyTasksVM struct {
 	Title  string
 	Active string
 	User   UserVM
 
-	TotalTasks   int
-	StatusCounts map[string]int // optional
+	CanCreate bool // leader/admin
+	CanEdit   bool // leader/admin (for more fields inside modal)
+	CanStatus bool // student/leader/admin
 
-	Tasks []Task // you can also make a TaskRowVM if you prefer
+	TotalTasks   int
+	StatusCounts map[string]int
+	Tasks        []Task
+}
+
+type AdminTeamRowVM struct {
+	Team Team
+
+	TotalTasks    int
+	StatusCounts  map[string]int
+	PreviewTitles []string
+}
+
+type AdminTeamsVM struct {
+	Title  string
+	Active string
+	User   UserVM
+
+	Rows []AdminTeamRowVM
+}
+
+type UserPick struct {
+	ID       string
+	Username string
+	Email    string
+}
+
+type Comment struct {
+	CommentID int64     `json:"commentid"`
+	TaskID    int64     `json:"taskid"`
+	Author    string    `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
 }

@@ -23,17 +23,17 @@ import (
 )
 
 const (
-	apiVersion    = "/api/v1"
-	templatesPath = "./internal/front/web/templates"
-	staticsPath   = "internal/front/web/static"
+	apiVersion = "/api/v1"
 )
 
 var (
-	config    Config
-	engine    *gin.Engine
-	kcService *auth.Service
-	tpl       *template.Template
-	ds        Downstream
+	templatesPath = "./internal/front/web/templates"
+	staticsPath   = "internal/front/web/static"
+	config        Config
+	engine        *gin.Engine
+	kcService     *auth.Service
+	tpl           *template.Template
+	ds            Downstream
 )
 
 func setCors() {
@@ -102,12 +102,19 @@ func setTemplateEngine() {
 			}
 			return template.HTML(buf.String())
 		},
+		"joinUsernames": joinUsernames,
+		"joinTitles":    joinTitles,
+		"joinStrings": func(ss []string) string {
+			return strings.Join(ss, ",")
+		},
 	}
 	t := template.New("").Funcs(funcMap)
 
 	t = template.Must(t.ParseGlob(templatesPath + "/*.html"))
 	t = template.Must(t.ParseGlob(templatesPath + "/partials/*.html"))
 	t = template.Must(t.ParseGlob(templatesPath + "/pages/*.html"))
+	t = template.Must(t.ParseGlob(templatesPath + "/pages_admin/*.html"))
+
 	// add more folders as needed:
 	// t = template.Must(t.ParseGlob(templatesPath + "/pages_admin/*.html"))
 
@@ -156,7 +163,7 @@ func setRoutes() {
 
 	kcAuth := mustInitKcAuth()
 	verified := apiV1.Group("/auth")
-	verified.Use(kcAuth.RequireRoles("student", "admin"))
+	verified.Use(kcAuth.RequireRoles("student", "leader", "admin"))
 	verified.Use(auth.RequireEmailVerified())
 	// use middleware to check for authentication...
 	{
@@ -164,22 +171,32 @@ func setRoutes() {
 		verified.GET("/myteams", myTeamsHandler)
 		verified.GET("/mytasks", myTasksHandler)
 
+		verified.GET("/tasks/:id/json", taskDetailJSONHandler)
+		verified.POST("/tasks/:id/status", taskStatusHandler)
+		verified.POST("/tasks/:id/comment", addCommentHandler)
+
 		leader := verified.Group("/leader")
 		leader.Use(kcAuth.RequireRoles("leader", "admin"))
 		{
+			leader.POST("/teams/edit", editTeamHandler)
+			leader.POST("/teams/member/add", addMemberHandler)
+			leader.POST("/teams/member/remove", removeMemberHandler)
 
+			leader.POST("/tasks/create", kcAuth.RequireRoles("leader", "admin"), createTaskHandler)
 		}
 
 		admin := verified.Group("/admin")
 		admin.Use(kcAuth.RequireRoles("admin"))
 		{
-			admin.GET("/users")
-			admin.GET("/teams")
+			admin.GET("/users", adminUsersHandlers)
+			admin.GET("/teams", adminTeamsHandler)
+			admin.POST("/teams/create", createTeamHandler)
+			admin.POST("/teams/:teamid/delete", deleteTeamHandler)
 
 			admin.GET("/users/:id", handleAdminGetUserByID)
 			admin.POST("/users/:id/roles", handleAdminSetUserRoles)
 			admin.POST("/users/:id/active", handleAdminVerifyEmail)
-
+			admin.POST("/users/:id/delete", handleAdminDeleteUser)
 		}
 	}
 
@@ -204,6 +221,8 @@ func InitAndServe(confPath string) {
 	// load configuration
 	config = loadConfig(confPath)
 
+	templatesPath = config.TemplatesPath
+	staticsPath = config.StaticsPath
 	// create a keycloak client service adapter (init)
 	var err error
 	kcService, err = auth.NewService(
@@ -307,4 +326,16 @@ func respondInFormat(c *gin.Context, data any, templateName string) {
 		// Fallback to JSON or a 406 Not Acceptable
 		c.JSON(http.StatusOK, data)
 	}
+}
+
+func joinUsernames(m []TeamMember) string {
+	out := make([]string, 0, len(m))
+	for _, x := range m {
+		out = append(out, x.Username)
+	}
+	return strings.Join(out, ", ")
+}
+
+func joinTitles(t []string) string {
+	return strings.Join(t, "|")
 }

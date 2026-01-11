@@ -18,3 +18,6 @@ create index if not exists idx_team_members_username on team_members(username);
 CREATE UNIQUE INDEX IF NOT EXISTS team_one_leader_per_team
 ON team_members(teamid)
 WHERE role = 'leader';
+
+CREATE UNIQUE INDEX IF NOT EXISTS team_members_unique
+ON team_members(teamid, username);

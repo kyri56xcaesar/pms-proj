@@ -1,0 +1,109 @@
+{{ define "partials/task_modal.html" }}
+<dialog id="taskDetailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h3 id="tdTitle">Task</h3>
+        <p class="modal-sub" id="tdMeta"></p>
+      </div>
+      <button class="btn btn-secondary btn-small" type="button"
+        onclick="document.getElementById('taskDetailModal').close()">
+        Close
+      </button>
+    </div>
+
+    <div class="kv">
+      <div><b>Status:</b> <span id="tdStatus"></span></div>
+      <div><b>Assignee:</b> <span id="tdAssignee"></span></div>
+      <div><b>Author:</b> <span id="tdAuthor"></span></div>
+      <div><b>Deadline:</b> <span id="tdDeadline"></span></div>
+      <div><b>Priority:</b> <span id="tdPriority"></span></div>
+    </div>
+
+    <hr/>
+    <h4>Description</h4>
+    <p class="muted" id="tdDesc"></p>
+
+    <hr/>
+    <h4>Comments</h4>
+    <ul id="tdComments" class="list-tight"></ul>
+
+    <hr/>
+    <h4>Add comment</h4>
+    <form onsubmit="return submitComment(event)">
+      <input type="hidden" id="tdTaskID" />
+      <textarea id="tdCommentBody" maxlength="2000" required
+                placeholder="Write a comment..." style="width:100%; min-height:80px;"></textarea>
+      <div class="row right" style="margin-top:0.5rem;">
+        <button class="btn btn-small positive-btn" type="submit">Post</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script>
+  async function openTask(taskID) {
+    try {
+      const res = await fetch(`/api/v1/auth/tasks/${taskID}/json`, { headers: { "Accept": "application/json" } });
+      if (!res.ok) { alert("Failed to load task: " + await res.text()); return; }
+
+      const data = await res.json();
+      const t = data.task;
+      const comments = data.comments || [];
+
+      document.getElementById('tdTaskID').value = t.taskid;
+      document.getElementById('tdTitle').textContent = t.title || 'Task';
+      document.getElementById('tdMeta').textContent = `Task #${t.taskid} · Team ${t.teamid}`;
+      document.getElementById('tdStatus').textContent = t.status || '-';
+      document.getElementById('tdAssignee').textContent = t.assignee || '-';
+      document.getElementById('tdAuthor').textContent = t.author || '-';
+      document.getElementById('tdPriority').textContent = t.priority || '-';
+      document.getElementById('tdDeadline').textContent = t.deadline ? String(t.deadline).slice(0,10) : '-';
+      document.getElementById('tdDesc').textContent = t.description || '-';
+
+      const ul = document.getElementById('tdComments');
+      ul.innerHTML = '';
+      if (comments.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'No comments';
+        ul.appendChild(li);
+      } else {
+        comments.forEach(c => {
+          const li = document.createElement('li');
+          li.textContent = `${c.author}: ${c.body}`;
+          ul.appendChild(li);
+        });
+      }
+
+      document.getElementById('taskDetailModal').showModal();
+    } catch (e) {
+      alert("Failed to load task: " + e);
+    }
+  }
+
+  async function submitComment(ev) {
+    ev.preventDefault();
+    const taskID = document.getElementById('tdTaskID').value;
+    const bodyEl = document.getElementById('tdCommentBody');
+    const body = bodyEl.value.trim();
+    if (!body) return false;
+
+    const res = await fetch(`/api/v1/auth/tasks/${taskID}/comment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+      body: new URLSearchParams({ body })
+    });
+
+    if (!res.ok) { alert("Failed to add comment: " + await res.text()); return false; }
+
+    const ul = document.getElementById('tdComments');
+    if (ul.children.length === 1 && ul.children[0].textContent === "No comments") ul.innerHTML = "";
+    const li = document.createElement('li');
+    li.textContent = `You: ${body}`;
+    ul.appendChild(li);
+
+    bodyEl.value = "";
+    return false;
+  }
+</script>
+{{ end }}

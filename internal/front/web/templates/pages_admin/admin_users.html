@@ -1,29 +1,88 @@
-{{ define "pages/admin_users.html" }}
+{{ define "pages_admin/admin_users.html" }}
 <section class="page">
   <h1>Admin · Users</h1>
 
   {{ if .VM.Users }}
   <div class="card">
     <table class="table">
+      <colgroup>
+        <col style="width: 10%">
+        <col style="width: 10%">
+        <col style="width: 10%">
+        <col style="width: 5%">
+        <col style="width: auto">
+        <col style="width: 420px"> <!-- Actions -->
+      </colgroup>
+
       <thead>
         <tr>
           <th>Username</th>
           <th>Email</th>
           <th>Enabled</th>
-          <th>Email Verified</th>
+          <th>Verified</th>
+          <th>Roles</th>
           <th class="right">Actions</th>
         </tr>
       </thead>
+
       <tbody>
         {{ range .VM.Users }}
-        <tr>
+        <tr id="user-row-{{ .ID }}">
           <td><b>{{ .Username }}</b></td>
           <td>{{ .Email }}</td>
           <td>{{ if .Enabled }}Yes{{ else }}No{{ end }}</td>
-          <td>{{ if .EmailVerified }}Yes{{ else }}No{{ end }}</td>
-          <td class="right">
-            <!-- details page later -->
-            <a class="btn btn-small" href="/api/v1/auth/admin/users/{{ .ID }}">Open</a>
+          <td>
+            <span id="verified-{{ .ID }}">
+              {{ if .EmailVerified }}Yes{{ else }}No{{ end }}
+            </span>
+          </td>
+
+          <td>
+            {{ if .Roles }}
+              <div class="pill-row">
+                {{ range .Roles }}
+                  <span class="pill">{{ . }}</span>
+                {{ end }}
+              </div>
+            {{ else }}
+              <span class="muted">none</span>
+            {{ end }}
+          </td>
+
+          <td class="right actions">
+            <button class="btn btn-small" type="button"
+              onclick="openUserDetails(
+                '{{ .ID }}',
+                '{{ js .Username }}',
+                '{{ js .Email }}',
+                '{{ if .Enabled }}1{{ else }}0{{ end }}',
+                '{{ if .EmailVerified }}1{{ else }}0{{ end }}',
+                '{{ js (joinStrings .Roles) }}'
+              )">
+              Open
+            </button>
+
+            {{ if not .EmailVerified }}
+              <button class="btn btn-small positive-btn" type="button"
+                onclick="verifyEmail('{{ .ID }}')">
+                Verify
+              </button>
+            {{ else }}
+              <span class="status-badge ok green-btn">Verified</span>
+            {{ end }}
+
+
+            <button class="btn btn-small" type="button"
+              onclick="openRolesModal('{{ .ID }}', '{{ js .Username }}', '{{ js (joinStrings .Roles) }}')">
+              Roles
+            </button>
+
+            <form method="post" action="/api/v1/auth/admin/users/{{ .ID }}/delete" style="display:inline">
+              <button class="btn btn-small btn-danger" type="submit"
+                onclick="return confirm('Delete user {{ .Username }}? This cannot be undone.');">
+                Delete
+              </button>
+            </form>
           </td>
         </tr>
         {{ end }}
@@ -33,5 +92,249 @@
   {{ else }}
     <p class="muted">No users found.</p>
   {{ end }}
+
+  {{/* DETAILS MODAL */}}
+  <dialog id="adminUserDetailsModal">
+    <div class="modal">
+      <h3 id="uTitle"></h3>
+      <p class="muted" id="uEmail"></p>
+
+      <div class="kv">
+        <div><b>ID:</b> <span id="uID"></span></div>
+        <div><b>Enabled:</b> <span id="uEnabled"></span></div>
+        <div><b>Email verified:</b> <span id="uVerified"></span></div>
+      </div>
+
+      <hr/>
+
+      <h4>Roles</h4>
+      <div id="uRoles" class="pill-row"></div>
+
+      <div class="row right">
+        <button class="btn btn-secondary" type="button"
+          onclick="document.getElementById('adminUserDetailsModal').close()">
+          Close
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  {{/* ROLES MODAL */}}
+<dialog id="adminUserRolesModal">
+  <form method="post" action="" class="modal" id="rolesForm" onsubmit="return submitRoles(event)">
+    <div class="modal-head">
+      <div>
+        <h3 id="rolesTitle">Change roles</h3>
+        <p class="modal-sub" id="rolesSub"></p>
+      </div>
+      <button class="btn btn-secondary btn-small" type="button"
+        onclick="document.getElementById('adminUserRolesModal').close()">
+        Close
+      </button>
+    </div>
+
+    <input type="hidden" name="roles_csv" id="rolesCSV" />
+
+    <div class="roles-toolbar">
+      <div class="left">
+        <span class="muted">Selected:</span>
+        <span id="rolesSelectedCount" class="status-badge"></span>
+      </div>
+      <div class="right">
+        <button class="small-link" type="button" onclick="selectAllRoles(true)">Select all</button>
+        <button class="small-link" type="button" onclick="selectAllRoles(false)">Select none</button>
+      </div>
+    </div>
+
+    <div class="roles-grid" id="rolesGrid">
+      {{ range .VM.ManagedRoles }}
+        <label class="role-item">
+          <input type="checkbox" value="{{ . }}" onchange="rebuildRolesCSV()" class="roleBox"/>
+          <span>{{ . }}</span>
+        </label>
+      {{ end }}
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-small positive-btn" type="submit">Save</button>
+      <button class="btn btn-secondary btn-small" type="button"
+        onclick="document.getElementById('adminUserRolesModal').close()">
+        Cancel
+      </button>
+    </div>
+  </form>
+</dialog>
+
+
+  <script>
+    function splitCSV(s) {
+      if (!s) return [];
+      return s.split(",").map(x => x.trim()).filter(Boolean);
+    }
+
+    function openUserDetails(id, username, email, enabled, verified, rolesCSV) {
+      document.getElementById('uTitle').textContent = username;
+      document.getElementById('uEmail').textContent = email || '-';
+      document.getElementById('uID').textContent = id;
+      document.getElementById('uEnabled').textContent = enabled === '1' ? 'Yes' : 'No';
+      document.getElementById('uVerified').textContent = verified === '1' ? 'Yes' : 'No';
+
+      const rolesDiv = document.getElementById('uRoles');
+      rolesDiv.innerHTML = '';
+      const roles = splitCSV(rolesCSV);
+      if (roles.length === 0) {
+        rolesDiv.innerHTML = '<span class="muted">none</span>';
+      } else {
+        roles.forEach(r => {
+          const span = document.createElement('span');
+          span.className = 'pill';
+          span.textContent = r;
+          rolesDiv.appendChild(span);
+        });
+      }
+
+      document.getElementById('adminUserDetailsModal').showModal();
+    }
+
+    function openRolesModal(userID, username, rolesCSV) {
+      document.getElementById('rolesTitle').textContent = 'Roles · ' + username;
+
+      const form = document.getElementById('rolesForm');
+      form.action = '/api/v1/auth/admin/users/' + userID + '/roles';
+
+      // set checkboxes
+      const current = new Set(splitCSV(rolesCSV));
+      document.querySelectorAll('#adminUserRolesModal .roleBox').forEach(cb => {
+        cb.checked = current.has(cb.value);
+      });
+
+      rebuildRolesCSV();
+      document.getElementById('adminUserRolesModal').showModal();
+    }
+
+    function rebuildRolesCSV() {
+      const selected = [];
+      document.querySelectorAll('#adminUserRolesModal .roleBox').forEach(cb => {
+        if (cb.checked) selected.push(cb.value);
+      });
+      document.getElementById('rolesCSV').value = selected.join(",");
+    }
+  </script>
+
+  <script>
+  async function verifyEmail(userID) {
+    try {
+      const res = await fetch(`/api/v1/auth/admin/users/${userID}/active`, {
+        method: "POST",
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        alert("Verify failed: " + txt);
+        return;
+      }
+
+      // Update UI in-place
+      const verifiedCell = document.getElementById(`verified-${userID}`);
+      if (verifiedCell) verifiedCell.textContent = "Yes";
+
+      // Replace the Verify button with badge
+      const row = document.getElementById(`user-row-${userID}`);
+      if (row) {
+        // find verify button and replace
+        const buttons = row.querySelectorAll("button");
+        buttons.forEach(b => {
+          if (b.textContent.trim() === "Verify") {
+            const span = document.createElement("span");
+            span.className = "status-badge ok";
+            span.textContent = "Verified";
+            b.replaceWith(span);
+          }
+        });
+      }
+    } catch (e) {
+      alert("Verify failed: " + e);
+    }
+  }
+
+  function splitCSV(s) {
+    if (!s) return [];
+    return s.split(",").map(x => x.trim()).filter(Boolean);
+  }
+
+  function openRolesModal(userID, username, rolesCSV) {
+    document.getElementById('rolesTitle').textContent = 'Roles · ' + username;
+    document.getElementById('rolesSub').textContent = 'User ID: ' + userID;
+
+    const form = document.getElementById('rolesForm');
+    form.action = '/api/v1/auth/admin/users/' + userID + '/roles';
+
+    const current = new Set(splitCSV(rolesCSV));
+    document.querySelectorAll('#adminUserRolesModal .roleBox').forEach(cb => {
+      cb.checked = current.has(cb.value);
+    });
+
+    rebuildRolesCSV();
+    document.getElementById('adminUserRolesModal').showModal();
+  }
+
+  function rebuildRolesCSV() {
+    const selected = [];
+    document.querySelectorAll('#adminUserRolesModal .roleBox').forEach(cb => {
+      if (cb.checked) selected.push(cb.value);
+    });
+    document.getElementById('rolesCSV').value = selected.join(",");
+
+    const badge = document.getElementById('rolesSelectedCount');
+    if (badge) {
+      badge.textContent = String(selected.length);
+      badge.className = "status-badge " + (selected.length === 0 ? "warn" : "ok");
+    }
+  }
+
+  function selectAllRoles(on) {
+    document.querySelectorAll('#adminUserRolesModal .roleBox').forEach(cb => {
+      cb.checked = on;
+    });
+    rebuildRolesCSV();
+  }
+
+  async function submitRoles(ev) {
+    ev.preventDefault();
+
+    const form = ev.target;
+    const url = form.action;
+    const rolesCSV = document.getElementById('rolesCSV').value;
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json"
+        },
+        body: new URLSearchParams({ roles_csv: rolesCSV })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        alert("Role update failed: " + txt);
+        return false;
+      }
+
+      // Optional: update the row pills without reload
+      // easiest: reload just this page section; simplest for now: refresh page
+      // But you asked to stay in place; we can update pills if you want.
+      document.getElementById('adminUserRolesModal').close();
+      location.reload(); // simplest reliable way
+      return false;
+    } catch (e) {
+      alert("Role update failed: " + e);
+      return false;
+    }
+  }
+</script>
+
 </section>
 {{ end }}

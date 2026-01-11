@@ -3,5 +3,5 @@ package main
 import "kyri56xcaesar/pms-proj/internal/mteam"
 
 func main() {
-	mteam.InitAndServe("./config/team.env")
+	mteam.InitAndServe("./config/team.container.env")
 }

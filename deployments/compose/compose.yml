@@ -46,7 +46,7 @@ services:
       - "5432:5432"
 
   # we will have each service
-
+ 
 volumes:
   kc-db-data:
     driver: local

@@ -5,7 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/Nerzal/gocloak/v13"
 	"github.com/gin-gonic/gin"
 )
 
@@ -313,6 +319,15 @@ func myTasksHandler(c *gin.Context) {
 			break
 		}
 	}
+	isLeader := false
+	for _, r := range roles {
+		if r == "leader" {
+			isLeader = true
+		}
+		if r == "admin" {
+			isAdmin = true
+		}
+	}
 
 	bearer := c.GetString("kc.access_token")
 	if bearer == "" {
@@ -380,6 +395,9 @@ func myTasksHandler(c *gin.Context) {
 	vm.TotalTasks = len(myTasks)
 	vm.StatusCounts = counts
 	vm.Tasks = myTasks
+	vm.CanCreate = isLeader || isAdmin
+	vm.CanEdit = isLeader || isAdmin
+	vm.CanStatus = true // since verified already ensures student/admin; keep true
 
 	vm.User.Username = username
 	vm.User.Roles = roles
@@ -416,6 +434,7 @@ func myTeamsHandler(c *gin.Context) {
 			isLeader = true
 		}
 	}
+	canCreate := isAdmin
 	canManage := isAdmin || isLeader
 
 	bearer := c.GetString("kc.access_token")
@@ -451,7 +470,6 @@ func myTeamsHandler(c *gin.Context) {
 
 			// IMPORTANT: use request context, not context.Background()
 			tasksResponse, e := ds.TeamTasks(c.Request.Context(), bearer, teamID)
-
 			ch <- result{teamID: teamID, tasks: tasksResponse.Items, err: e}
 		}(teamID)
 	}
@@ -473,26 +491,55 @@ func myTeamsHandler(c *gin.Context) {
 		teamTasks := tasksByTeam[team.TeamID]
 
 		counts := map[string]int{"TODO": 0, "IN_PROGRESS": 0, "DONE": 0}
-		preview := make([]string, 0, 5)
+		preview := make([]TaskPreviewItem, 0, 5)
 
 		for _, task := range teamTasks {
 			if _, ok := counts[task.Status]; ok {
 				counts[task.Status]++
 			}
 			if len(preview) < 5 {
-				preview = append(preview, task.Title)
+				preview = append(preview, TaskPreviewItem{
+					TaskID: task.TaskID,
+					Title:  task.Title,
+				})
 			}
 		}
 
 		rows = append(rows, MyTeamRowVM{
-			Team: team,
+			TeamID: team.TeamID,
+			Team:   team,
 			Summary: TeamTasksSummary{
-				TeamID:        team.TeamID,
-				Counts:        counts,
-				Total:         len(teamTasks),
-				PreviewTitles: preview,
+				TeamID:  team.TeamID,
+				Counts:  counts,
+				Total:   len(teamTasks),
+				Preview: preview,
 			},
 		})
+
+	}
+
+	var users []UserPick
+	if isAdmin {
+		jwt, err := kcService.LoginAdmin(c.Request.Context())
+		if err == nil {
+			kcUsers, err := kcService.Client.GetUsers(c.Request.Context(), jwt.AccessToken, kcService.Realm, gocloak.GetUsersParams{
+				Max: gocloak.IntP(200),
+			})
+			if err == nil {
+				users = make([]UserPick, 0, len(kcUsers))
+				for _, u := range kcUsers {
+					if u == nil {
+						continue
+					}
+					users = append(users, UserPick{
+						ID:       derefStr(u.ID),
+						Username: derefStr(u.Username),
+						Email:    derefStr(u.Email),
+					})
+				}
+				sort.Slice(users, func(i, j int) bool { return users[i].Username < users[j].Username })
+			}
+		}
 	}
 
 	// 4) Build VM
@@ -501,9 +548,11 @@ func myTeamsHandler(c *gin.Context) {
 	vm.Active = "teams"
 	vm.IsAdmin = isAdmin
 	vm.IsLeader = isLeader
+	vm.CanCreate = canCreate
 	vm.CanManage = canManage
 	vm.Rows = rows
 
+	vm.Users = users // add field to MyTeamsVM
 	vm.User.Username = username.(string)
 	vm.User.Roles = roles
 	vm.User.IsAdmin = isAdmin
@@ -520,51 +569,391 @@ func myTeamsHandler(c *gin.Context) {
 	})
 }
 
-func adminTeamsHandler(c *gin.Context) {
-	// Page user info (logged-in admin)
-	username, _ := c.Get("kc.username")
-	email, _ := c.Get("kc.email")
-	rolesAny, _ := c.Get("kc.roles")
-	firstname, _ := c.Get("kc.firstname")
-	lastname, _ := c.Get("kc.lastname")
-	roles, _ := rolesAny.([]string)
-
-	// Use service account token to call KC Admin API
-	jwt, err := kcService.LoginAdmin(c.Request.Context())
-	if err != nil {
-		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "Keycloak login (service): " + err.Error()})
+func createTeamHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
 		return
 	}
 
-	users, err := kcService.ListAdminUsers(c.Request.Context(), jwt.AccessToken, 200)
-	if err != nil {
-		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "Keycloak list users: " + err.Error()})
+	name := strings.TrimSpace(c.PostForm("name"))
+	desc := strings.TrimSpace(c.PostForm("description"))
+	leader := strings.TrimSpace(c.PostForm("leader"))
+
+	if name == "" || leader == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "name and leader required"})
 		return
 	}
 
-	// VM (match your layout usage)
-	var vm struct {
-		Title  string
-		Active string
-		User   UserVM
-		Users  []AdminUser
+	req := gin.H{"name": name, "description": desc, "leader": leader}
+
+	// Forward to TeamAPI: POST /admin/teams
+	if err := ds.PostJSON(c.Request.Context(), bearer, ds.TeamBase+"/admin/teams", req, nil); err != nil {
+		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "TeamAPI: " + err.Error()})
+		return
 	}
-	vm.Title = "Admin Users"
-	vm.Active = "admin-users"
-	vm.Users = users
 
-	vm.User.Username = username.(string)
-	vm.User.Email = email.(string)
-	vm.User.Roles = roles
-	vm.User.IsAdmin = true
-	vm.User.Firstname = firstname.(string)
-	vm.User.Lastname = lastname.(string)
+	c.Redirect(http.StatusSeeOther, "/api/v1/auth/myteams")
+}
 
-	c.HTML(http.StatusOK, "layout.html", gin.H{
-		"Title":  vm.Title,
-		"Active": vm.Active,
-		"User":   vm.User,
-		"Page":   "pages/admin_users.html",
-		"VM":     vm,
+func editTeamHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	idStr := strings.TrimSpace(c.PostForm("teamid"))
+	name := strings.TrimSpace(c.PostForm("name"))
+	desc := strings.TrimSpace(c.PostForm("description"))
+
+	teamID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid teamid"})
+		return
+	}
+	if name == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "name required"})
+		return
+	}
+
+	req := gin.H{"teamid": teamID, "name": name, "description": desc}
+
+	// Forward to TeamAPI: PUT /admin/teams
+	if err := ds.PutJSON(c.Request.Context(), bearer, ds.TeamBase+"/admin/teams?teamid="+idStr, req, nil); err != nil {
+		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "TeamAPI: " + err.Error()})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/api/v1/auth/myteams")
+}
+
+func addMemberHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	idStr := strings.TrimSpace(c.PostForm("teamid"))
+	username := strings.TrimSpace(c.PostForm("username"))
+
+	teamID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid teamid"})
+		return
+	}
+	if username == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "username required"})
+		return
+	}
+
+	req := gin.H{"username": username}
+
+	url := fmt.Sprintf("%s/leader/teams/%d/members", ds.TeamBase, teamID)
+	if err := ds.PostJSON(c.Request.Context(), bearer, url, req, nil); err != nil {
+		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "TeamAPI: " + err.Error()})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/api/v1/auth/myteams")
+}
+
+func removeMemberHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	idStr := strings.TrimSpace(c.PostForm("teamid"))
+	username := strings.TrimSpace(c.PostForm("username"))
+
+	log.Printf("id: %v, username: %v", idStr, username)
+
+	teamID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid teamid"})
+		return
+	}
+	if username == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "username required"})
+		return
+	}
+
+	// Forward to TeamAPI: DELETE /admin/teams/:teamid/members/:username
+	url := fmt.Sprintf("%s/leader/teams/%d/members/%s", ds.TeamBase, teamID, url.PathEscape(username))
+	if err := ds.Delete(c.Request.Context(), bearer, url); err != nil {
+		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "TeamAPI: " + err.Error()})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/api/v1/auth/myteams")
+}
+
+func deleteTeamHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	teamIDStr := c.Param("teamid")
+	teamID, err := strconv.ParseInt(teamIDStr, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid teamid"})
+		return
+	}
+
+	// example: DELETE /admin/teams?teamid=123
+	url := fmt.Sprintf("%s/admin/teams?teamid=%d", ds.TeamBase, teamID)
+	if err := ds.Delete(c.Request.Context(), bearer, url); err != nil {
+		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "TeamAPI: " + err.Error()})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/api/v1/auth/myteams")
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+func derefBool(p *bool) bool {
+	if p == nil {
+		return false
+	}
+	return *p
+}
+
+func taskDetailJSONHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	idStr := c.Param("id")
+	taskID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	// fetch task + comments (parallel)
+	type resT struct {
+		task Task
+		err  error
+	}
+	type resC struct {
+		items []Comment
+		err   error
+	}
+
+	chT := make(chan resT, 1)
+	chC := make(chan resC, 1)
+
+	go func() {
+		t, e := ds.TaskByID(c.Request.Context(), bearer, taskID)
+		chT <- resT{task: t, err: e}
+	}()
+	go func() {
+		cr, e := ds.CommentsByTaskID(c.Request.Context(), bearer, taskID)
+		chC <- resC{items: cr.Items, err: e}
+	}()
+
+	rt := <-chT
+	if rt.err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "TaskAPI: " + rt.err.Error()})
+		return
+	}
+	rc := <-chC
+	if rc.err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "TaskAPI: " + rc.err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"task":     rt.task,
+		"comments": rc.items,
 	})
+}
+
+func taskStatusHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	idStr := c.Param("id")
+	taskID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	status := strings.TrimSpace(c.PostForm("status"))
+	if status == "" {
+		// allow JSON too
+		var body struct {
+			Status string `json:"status"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil {
+			status = strings.TrimSpace(body.Status)
+		}
+	}
+
+	switch status {
+	case "TODO", "IN_PROGRESS", "DONE":
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		return
+	}
+
+	req := gin.H{"taskid": taskID, "status": status}
+	log.Printf("sending req to update stauts: %+v", req)
+	url := fmt.Sprintf("%s/auth/change-status?taskid=%v&status=%v", ds.TaskBase, taskID, status)
+
+	if err := ds.PatchJSON(c.Request.Context(), bearer, url, req, nil); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "TaskAPI: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+type CreateTaskForm struct {
+	TeamID      string
+	Title       string
+	Description string
+	Assignee    string
+	Priority    string
+	Deadline    string // yyyy-mm-dd from <input type="date">
+}
+
+func createTaskHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	// Read form fields
+	f := CreateTaskForm{
+		TeamID:      strings.TrimSpace(c.PostForm("teamid")),
+		Title:       strings.TrimSpace(c.PostForm("title")),
+		Description: strings.TrimSpace(c.PostForm("description")),
+		Assignee:    strings.TrimSpace(c.PostForm("assignee")),
+		Priority:    strings.TrimSpace(c.PostForm("priority")),
+		Deadline:    strings.TrimSpace(c.PostForm("deadline")),
+	}
+
+	// Validate teamid
+	teamID, err := strconv.ParseInt(f.TeamID, 10, 64)
+	if err != nil || teamID <= 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid teamid"})
+		return
+	}
+
+	if f.Title == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "title required"})
+		return
+	}
+	if f.Assignee == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "assignee required"})
+		return
+	}
+
+	// Normalize priority
+	pr := strings.ToUpper(f.Priority)
+	if pr == "" {
+		pr = "MEDIUM"
+	}
+	switch pr {
+	case "LOW", "MEDIUM", "HIGH":
+	default:
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid priority"})
+		return
+	}
+
+	// Deadline: optional
+	// You can pass it as string to TaskAPI and let it parse, or parse here.
+	// We'll parse here into RFC3339 to be consistent.
+	var deadlineRFC3339 *string
+	if f.Deadline != "" {
+		// HTML date is yyyy-mm-dd
+		d, err := time.Parse("2006-01-02", f.Deadline)
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "error.html", gin.H{"error": "invalid deadline"})
+			return
+		}
+		// choose midnight UTC; or local. UTC is simplest for APIs.
+		v := d.UTC().Format(time.RFC3339)
+		deadlineRFC3339 = &v
+	}
+
+	// Build JSON request for TaskAPI
+	req := gin.H{
+		"teamid":      teamID,
+		"title":       f.Title,
+		"description": f.Description,
+		"assignee":    f.Assignee,
+		"priority":    pr,
+	}
+	if deadlineRFC3339 != nil {
+		req["deadline"] = *deadlineRFC3339
+	}
+
+	// Forward to TaskAPI
+	url := fmt.Sprintf("%s/auth/tasks", ds.TaskBase)
+	if err := ds.PostJSON(c.Request.Context(), bearer, url, req, nil); err != nil {
+		c.HTML(http.StatusBadGateway, "error.html", gin.H{"error": "TaskAPI: " + err.Error()})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/api/v1/auth/mytasks")
+}
+
+func addCommentHandler(c *gin.Context) {
+	bearer := c.GetString("kc.access_token")
+	if bearer == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "access_token missing"})
+		return
+	}
+
+	idStr := c.Param("id")
+	taskID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	body := strings.TrimSpace(c.PostForm("body"))
+	if body == "" {
+		// allow JSON too
+		var j struct {
+			Body string `json:"body"`
+		}
+		if err := c.ShouldBindJSON(&j); err == nil {
+			body = strings.TrimSpace(j.Body)
+		}
+	}
+	if body == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "body required"})
+		return
+	}
+
+	req := gin.H{"taskid": taskID, "body": body}
+	url := fmt.Sprintf("%s/auth/comments", ds.TaskBase)
+
+	var resp any
+	if err := ds.PostJSON(c.Request.Context(), bearer, url, req, &resp); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "TaskAPI: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"status": "ok"})
 }

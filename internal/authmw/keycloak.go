@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/Nerzal/gocloak/v13"
@@ -48,6 +50,8 @@ func NewService(baseURL, Realm, clientID, issuer, aud, clientSecret string) (*Se
 	s.KCAuth = kcAuth
 
 	if err := s.selfTest(); err != nil {
+		log.Printf("self test error: %v", err)
+
 		return nil, err
 	}
 
@@ -211,4 +215,118 @@ func (s *Service) ListUsersSimple(ctx context.Context, token string, max int) ([
 	return s.Client.GetUsers(ctx, token, s.Realm, gocloak.GetUsersParams{
 		Max: gocloak.IntP(max),
 	})
+}
+
+type AdminUserRow struct {
+	ID            string   `json:"id"`
+	Username      string   `json:"username"`
+	Email         string   `json:"email"`
+	FirstName     string   `json:"firstName"`
+	LastName      string   `json:"lastName"`
+	Enabled       bool     `json:"enabled"`
+	EmailVerified bool     `json:"emailVerified"`
+	Roles         []string `json:"roles"`
+}
+
+func (s *Service) ListRealmUsersWithRoles(ctx context.Context, max int) ([]AdminUserRow, error) {
+	if max <= 0 {
+		max = 50
+	}
+	if max > 200 {
+		max = 200
+	}
+
+	// 1) service account token
+	jwt, err := s.LoginAdmin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("login admin: %w", err)
+	}
+	token := jwt.AccessToken
+
+	// 2) list users
+	users, err := s.Client.GetUsers(ctx, token, s.Realm, gocloak.GetUsersParams{
+		Max: gocloak.IntP(max),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get users: %w", err)
+	}
+
+	// 3) for each user, fetch effective realm roles (composites included)
+	out := make([]AdminUserRow, 0, len(users))
+
+	// bounded concurrency (prevents hammering KC)
+	sem := make(chan struct{}, 6)
+	var mu sync.Mutex
+	var firstErr error
+	var wg sync.WaitGroup
+
+	for _, u := range users {
+		if u == nil || u.ID == nil {
+			continue
+		}
+		userID := *u.ID
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(u *gocloak.User, userID string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			roles, err := s.Client.GetCompositeRealmRolesByUserID(ctx, token, s.Realm, userID)
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("get roles for user %s: %w", userID, err)
+				}
+				mu.Unlock()
+				return
+			}
+
+			roleNames := make([]string, 0, len(roles))
+			for _, r := range roles {
+				if r != nil && r.Name != nil {
+					roleNames = append(roleNames, *r.Name)
+				}
+			}
+			sort.Strings(roleNames)
+
+			row := AdminUserRow{
+				ID:            derefStr(u.ID),
+				Username:      derefStr(u.Username),
+				Email:         derefStr(u.Email),
+				FirstName:     derefStr(u.FirstName),
+				LastName:      derefStr(u.LastName),
+				Enabled:       derefBool(u.Enabled),
+				EmailVerified: derefBool(u.EmailVerified),
+				Roles:         roleNames,
+			}
+
+			mu.Lock()
+			out = append(out, row)
+			mu.Unlock()
+		}(u, userID)
+	}
+
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	// optional: stable ordering for UI
+	sort.Slice(out, func(i, j int) bool { return out[i].Username < out[j].Username })
+
+	return out, nil
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+func derefBool(p *bool) bool {
+	if p == nil {
+		return false
+	}
+	return *p
 }
