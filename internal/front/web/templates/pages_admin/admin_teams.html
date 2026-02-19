@@ -83,7 +83,7 @@
               data-done="{{ index .StatusCounts "DONE" }}"
               data-total="{{ .TotalTasks }}"
               data-preview="{{ joinTitles .PreviewTitles }}"
-              onclick="openAdminDetails(this)">
+              onclick="openAdminDetails('{{ .Team.TeamID }}',' {{ .Team.TeamName }}', '{{ .Team.Description }}', '{{ .Team.Leader }}', '{{ .Team.MemberCount }}', '{{ joinUsernames .Team.Members }}', '{{ .StatusCounts "TODO"}}', '{{ index .StatusCounts "IN_PROGRESS"}}', '{{ index .StatusCounts "DONE" }}', '{{ .TotalTasks }}', '{{ joinTitles .PreviewTitles }}' )">
               Open
             </button>
 
